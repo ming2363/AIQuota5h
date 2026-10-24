@@ -1,4 +1,4 @@
-export const GRACE_MS = 120_000;
+export const GRACE_MS = 65_000;
 export const REFRESH_MS = 60_000;
 export const DUE_SLACK_MS = 5_000;
 export const WATCHDOG_MS = 10_000;

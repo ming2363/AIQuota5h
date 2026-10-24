@@ -6,5 +6,5 @@
     "agy": "/Users/zhangming/.local/bin/agy"
   },
   "refreshIntervalMs": 60000,
-  "graceMs": 120000
+  "graceMs": 65000
 }

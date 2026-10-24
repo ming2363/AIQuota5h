@@ -1,54 +1,49 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1120" height="520" viewBox="0 0 1120 520" role="img" aria-labelledby="title desc">
-<title id="title">到期自动检查，符合条件才激活</title><desc id="desc">后台默认每60秒读取额度。旧周期结束满120秒后核对账号、窗口、费用和防重发条件。条件通过只发送一条，随后核验；未通过保持等待。读取与激活都有历史。</desc>
+<title id="title">额度窗口到期自动接续</title><desc id="desc">程序在后台识别旧窗口结束，核对状态后主动发送最小请求，核验新窗口计时启动，并持续守候下一次周期结束。开关与历史是自动激活的辅助。</desc>
 <style>text{font-family:"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif}</style>
 <defs><marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0L10 3.5L0 7Z" fill="#2563eb"/></marker></defs>
 <rect x="1" y="1" width="1118" height="518" rx="24" fill="#f8fbff" stroke="#dce6f1"/>
-<text x="40" y="56" font-size="32" fill="#14253f" font-weight="700" text-anchor="start">不用守着倒计时。</text>
-<rect x="40" y="157" width="176" height="152" rx="16" fill="white" stroke="#dce6f1"/>
-<text x="128" y="271" font-size="22" fill="#14253f" font-weight="600" text-anchor="middle">后台读取</text>
-<rect x="256" y="157" width="176" height="152" rx="16" fill="white" stroke="#dce6f1"/>
-<text x="344" y="271" font-size="22" fill="#14253f" font-weight="600" text-anchor="middle">到期复核</text>
-<rect x="472" y="157" width="176" height="152" rx="16" fill="white" stroke="#dce6f1"/>
-<text x="560" y="271" font-size="22" fill="#14253f" font-weight="600" text-anchor="middle">条件检查</text>
-<rect x="688" y="157" width="176" height="152" rx="16" fill="white" stroke="#dce6f1"/>
-<text x="776" y="271" font-size="22" fill="#14253f" font-weight="600" text-anchor="middle">发送 1 条</text>
-<rect x="904" y="157" width="176" height="152" rx="16" fill="white" stroke="#dce6f1"/>
-<text x="992" y="271" font-size="22" fill="#14253f" font-weight="600" text-anchor="middle">继续核验</text>
-<path d="M216 223H248" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<path d="M248.0 223.0L238.0 226.5L238.0 219.5Z" fill="#2563eb"/>
-<path d="M432 223H464" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<path d="M464.0 223.0L454.0 226.5L454.0 219.5Z" fill="#2563eb"/>
-<path d="M648 223H680" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<path d="M680.0 223.0L670.0 226.5L670.0 219.5Z" fill="#2563eb"/>
-<path d="M864 223H896" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<path d="M896.0 223.0L886.0 226.5L886.0 219.5Z" fill="#2563eb"/>
-<circle cx="128" cy="208" r="25" fill="#eff6ff" stroke="none"/>
-<path d="M111 207a17 17 0 1 1 5 13M111 196v11h11" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="344" cy="207" r="23" fill="none" stroke="#2563eb"/>
-<path d="M344 194.35V207L353.2 212.75" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="344" y="296" font-size="14" fill="#64748b" font-weight="400" text-anchor="middle">旧周期结束 +120s</text>
-<path d="M560 181l22 8v17q0 19-22 29-22-10-22-29v-17Z" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M553 205l5 5 10-12" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M751 223l47-36-15 48-12-16-20 4Z M771 219l27-32" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M956 207q36-36 72 0-36 36-72 0Z" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="992" cy="207" r="9" fill="none" stroke="#2563eb"/>
-<text x="128" y="296" font-size="14" fill="#64748b" font-weight="400" text-anchor="middle">默认每 60s</text>
-<text x="776" y="296" font-size="14" fill="#64748b" font-weight="400" text-anchor="middle">通过后才发送</text>
-<text x="992" y="296" font-size="14" fill="#64748b" font-weight="400" text-anchor="middle">接受 ≠ 已启动</text>
-<path d="M560 309V364H366" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<path d="M366.0 364.0L376.0 360.5L376.0 367.5Z" fill="#2563eb"/>
-<text x="446" y="351" font-size="15" fill="#64748b" font-weight="500" text-anchor="middle">未通过</text>
-<rect x="174" y="342" width="184" height="48" rx="12" fill="#eff6ff" stroke="#cfe0ff"/>
-<text x="266" y="373" font-size="20" fill="#2563eb" font-weight="600" text-anchor="middle">保持等待</text>
-<rect x="40" y="435" width="176" height="30" rx="15" fill="#eff6ff" stroke="none"/>
-<text x="128.0" y="456" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">账号一致</text>
-<rect x="240" y="435" width="176" height="30" rx="15" fill="#eff6ff" stroke="none"/>
-<text x="328.0" y="456" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">仅用套餐额度</text>
-<rect x="440" y="435" width="176" height="30" rx="15" fill="#eff6ff" stroke="none"/>
-<text x="528.0" y="456" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">同周期防重发</text>
-<rect x="640" y="435" width="176" height="30" rx="15" fill="#eff6ff" stroke="none"/>
-<text x="728.0" y="456" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">开关可暂停</text>
-<rect x="840" y="435" width="240" height="30" rx="15" fill="#eff6ff" stroke="none"/>
-<text x="960.0" y="456" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">操作历史留在本机</text>
-<text x="560" y="500" font-size="14" fill="#64748b" font-weight="400" text-anchor="middle">实际发送能力取决于渠道；见接入图</text>
+<text x="40" y="56" font-size="30" fill="#14253f" font-weight="700" text-anchor="start">到期自动接续，不必等你再发第一条。</text>
+<rect x="40" y="150" width="176" height="160" rx="16" fill="white" stroke="#dce6f1"/>
+<text x="128" y="270" font-size="21" fill="#14253f" font-weight="600" text-anchor="middle">识别旧窗到期</text>
+<rect x="256" y="150" width="176" height="160" rx="16" fill="white" stroke="#dce6f1"/>
+<text x="344" y="270" font-size="21" fill="#14253f" font-weight="600" text-anchor="middle">核对状态</text>
+<rect x="472" y="150" width="176" height="160" rx="16" fill="white" stroke="#dce6f1"/>
+<text x="560" y="270" font-size="21" fill="#14253f" font-weight="600" text-anchor="middle">主动发 1 条</text>
+<rect x="688" y="150" width="176" height="160" rx="16" fill="white" stroke="#dce6f1"/>
+<text x="776" y="270" font-size="21" fill="#14253f" font-weight="600" text-anchor="middle">核验新窗启动</text>
+<rect x="904" y="150" width="176" height="160" rx="16" fill="white" stroke="#dce6f1"/>
+<text x="992" y="270" font-size="21" fill="#14253f" font-weight="600" text-anchor="middle">守候下一轮</text>
+<path d="M216 221H256" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M256.0 221.0L246.0 224.5L246.0 217.5Z" fill="#2563eb"/>
+<path d="M432 221H472" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M472.0 221.0L462.0 224.5L462.0 217.5Z" fill="#2563eb"/>
+<path d="M648 221H688" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M688.0 221.0L678.0 224.5L678.0 217.5Z" fill="#2563eb"/>
+<path d="M864 221H904" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M904.0 221.0L894.0 224.5L894.0 217.5Z" fill="#2563eb"/>
+<circle cx="128" cy="207" r="23" fill="none" stroke="#2563eb"/>
+<path d="M128 194.35V207L137.2 212.75" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M344 181l22 8v17q0 19-22 29-22-10-22-29v-17Z" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M337 205l5 5 10-12" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M535 223l47-36-15 48-12-16-20 4Z M555 219l27-32" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M740 207q36-36 72 0-36 36-72 0Z" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="776" cy="207" r="9" fill="none" stroke="#2563eb"/>
+<circle cx="992" cy="207" r="25" fill="#eff6ff" stroke="none"/>
+<path d="M975 207a17 17 0 1 1 5 13M975 196v11h11" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="128" y="296" font-size="14" fill="#64748b" font-weight="400" text-anchor="middle">后台持续值守</text>
+<text x="344" y="296" font-size="14" fill="#64748b" font-weight="400" text-anchor="middle">账号 / 周期 / 套餐</text>
+<text x="560" y="296" font-size="14" fill="#64748b" font-weight="400" text-anchor="middle">最小请求触发计时</text>
+<text x="776" y="296" font-size="14" fill="#64748b" font-weight="400" text-anchor="middle">确认后留存记录</text>
+<text x="992" y="296" font-size="14" fill="#64748b" font-weight="400" text-anchor="middle">自动衔接周期</text>
+<path d="M992 310V379H128V310" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M128.0 310.0L131.5 320.0L124.5 320.0Z" fill="#2563eb"/>
+<text x="560" y="367" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">持续循环</text>
+<rect x="40" y="435" width="280" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="180.0" y="456" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">到期激活 · 无需人工触发</text>
+<rect x="360" y="435" width="280" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="500.0" y="456" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">开关控制 · 后台常驻</text>
+<rect x="680" y="435" width="400" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="880.0" y="456" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">启动核验 · 同周期不重复发送</text>
+<text x="560" y="500" font-size="15" fill="#64748b" font-weight="400" text-anchor="middle">适用于需要首次请求启动计时的窗口</text>
 </svg>

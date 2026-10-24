@@ -106,11 +106,11 @@ test("生产读取工厂把历史边界传给 Codex 映射，旧窗口到期后�
   assert.equal(store.allWindows().find((item) => item.window_key === "5h")?.state, "unknown");
   assert.equal(sends, 0, "只有一次 0% 和新 reset 不能证明未启动");
 
-  now = oldReset + 100_000;
+  now = oldReset + 60_000;
   phase = "slide";
   await engine.enqueue("codex", "refresh");
   assert.equal(store.allWindows().find((item) => item.window_key === "5h")?.state, "idle");
-  assert.equal(sends, 0, "旧边界后 119 秒内即使已证明滑动也不发");
+  assert.equal(sends, 0, "旧边界后 65 秒内即使已证明滑动也不发");
 
   now = oldReset + 180_000;
   const beforeWait = now;

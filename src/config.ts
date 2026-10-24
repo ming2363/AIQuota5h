@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runtimePaths } from "./paths.js";
+import { GRACE_MS } from "./types.js";
 
 export interface AppConfig {
   nodePath: string;
@@ -21,6 +22,6 @@ export function loadConfig(): AppConfig {
       agy: path.join(os.homedir(), ".local", "bin", "agy"),
     },
     refreshIntervalMs: 60_000,
-    graceMs: 120_000,
+    graceMs: GRACE_MS,
   };
 }

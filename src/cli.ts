@@ -13,7 +13,7 @@ import { readCodexAccountId, sendCodex } from "./providers/codex.js";
 import { readGrokIdentity, sendGrok } from "./providers/grok.js";
 import { maskEmail, maskId, redactText } from "./redact.js";
 import { Store } from "./store.js";
-import type { PoolFact, SendResult, WindowFact } from "./types.js";
+import { GRACE_MS, type PoolFact, type SendResult, type WindowFact } from "./types.js";
 import { blocksActivation } from "./verify.js";
 import { dashboard, readHistory, taskHistory } from "./dashboard.js";
 import { requestRefresh, updateControl } from "./controls.js";
@@ -191,7 +191,7 @@ export function printStatus(store: Store, header: string[]): void {
       : taskBlocked
         ? "历史请求待核验，同周期不会重发"
         : provider === "grok"
-          ? "费用已证明套餐内；周窗口切换满 120 秒后才可能发一条"
+          ? `费用已证明套餐内；周窗口切换满 ${GRACE_MS / 1000} 秒后才可能发一条`
           : idleDue
             ? "有待激活窗口，到期复核后才可能发送"
             : "链路未阻塞，当前没有待激活窗口";
@@ -276,7 +276,7 @@ function install(): number {
       agy: whichAbs("agy") || path.join(os.homedir(), ".local", "bin", "agy"),
     },
     refreshIntervalMs: 60_000,
-    graceMs: 120_000,
+    graceMs: GRACE_MS,
   };
   fs.writeFileSync(path.join(home, "config.json"), `${JSON.stringify(config, null, 2)}\n`);
   const plist = renderPlist(config.nodePath, path.join(app, "index.js"), home);

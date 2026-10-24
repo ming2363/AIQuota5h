@@ -2,6 +2,10 @@
 
 调查时间：2026-10-16。账号、令牌和 CSRF 不写入本文。
 
+## 渠道与窗口
+
+![各渠道的额度池、周期和接入状态](images/support-map.svg)
+
 ## Codex
 
 - CLI：`/opt/homebrew/bin/codex`，版本 `0.147.0`。登录方式 `codex login status` 为 ChatGPT。

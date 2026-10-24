@@ -35,12 +35,12 @@ function pool(windows: WindowFact[], billing: PoolFact["billingSafety"] = "subsc
   };
 }
 
-test("到期前与 119 秒不发送，满 120 秒才发送", () => {
-  const ended = NOW - 119_000;
+test("到期前与 64.999 秒不发送，满 65 秒才发送", () => {
+  const ended = NOW - 64_999;
   const early = decide(pool([window({ key: "5h", oldEndedAt: ended })]), NOW);
   assert.equal(early.action, "wait");
   assert.equal(early.reason, "grace_pending");
-  const due = decide(pool([window({ key: "5h", oldEndedAt: NOW - 120_000 })]), NOW);
+  const due = decide(pool([window({ key: "5h", oldEndedAt: NOW - 65_000 })]), NOW);
   assert.equal(due.action, "send");
   const beforeEnd = decide(pool([window({ key: "5h", state: "active", oldEndedAt: null, resetAt: NOW + 60_000 })]), NOW);
   assert.equal(beforeEnd.action, "skip");
@@ -110,7 +110,7 @@ test("滑动时钟加未使用文本可以证明 idle，但没有旧边界不能
   assert.equal(result.reason, "old_boundary_unknown");
 });
 
-test("服务端过去边界超过 120 秒时首次运行立即发送", () => {
+test("服务端过去边界超过等待时间时首次运行立即发送", () => {
   const classified = classifyWindow({
     key: "5h",
     kind: "session",
@@ -155,16 +155,16 @@ test("五小时恢复但周额度耗尽时不发送", () => {
   assert.equal(result.reason, "allowance_exhausted");
 });
 
-test("同请求会启动的周窗口未满 120 秒时等待，满 120 秒才合并", () => {
+test("同请求会启动的周窗口未满 65 秒时等待，满 65 秒才合并", () => {
   const wait = decide(pool([
     window({ key: "5h", oldEndedAt: NOW - 180_000 }),
-    window({ key: "weekly", oldEndedAt: NOW - 119_000 }),
+    window({ key: "weekly", oldEndedAt: NOW - 64_999 }),
   ]), NOW);
   assert.equal(wait.action, "wait");
-  assert.equal(wait.dueAt, NOW - 119_000 + 120_000);
+  assert.equal(wait.dueAt, NOW + 1);
   const send = decide(pool([
     window({ key: "5h", oldEndedAt: NOW - 180_000 }),
-    window({ key: "weekly", oldEndedAt: NOW - 120_000 }),
+    window({ key: "weekly", oldEndedAt: NOW - 65_000 }),
   ]), NOW);
   assert.equal(send.action, "send");
 });

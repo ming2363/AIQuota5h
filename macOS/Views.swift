@@ -14,7 +14,7 @@ struct DashboardView: View {
                     .frame(width: 52, height: 52).background(.tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
                 VStack(alignment: .leading, spacing: 4) {
                     Text("AIQuota5h").font(.title2.bold())
-                    Text("AI 订阅额度管理").font(.subheadline).foregroundStyle(.secondary)
+                    Text("额度窗口到期自动激活").font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if let data = model.dashboard {
@@ -46,8 +46,8 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("所有额度，一目了然").font(.title3.bold())
-                        Text("共享额度按池显示。倒计时来自服务端重置时间。").font(.callout).foregroundStyle(.secondary)
+                        Text("下一轮计时，不必等你开工。").font(.title3.bold())
+                        Text("旧窗口到期后，后台按开关主动触发下一轮，并核验启动结果。").font(.callout).foregroundStyle(.secondary)
                     }
                     Spacer()
                     if model.busy { ProgressView().controlSize(.small) }
@@ -188,7 +188,7 @@ struct DashboardView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("到期自动激活") {
-                Text("在额度概览中按额度池开关。开启后，仅在旧周期结束满 120 秒、账号和费用条件通过且没有重复请求时发送一条短消息。")
+                Text("在额度概览中按额度池开关。开启后，仅在旧周期结束满 65 秒、账号和费用条件通过且没有重复请求时发送一条短消息。")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Claude Code 当前仅支持监控；Antigravity 和 Grok 的实际发送取决于调用隔离和费用验证结果。")
                     .font(.caption).foregroundStyle(.secondary)

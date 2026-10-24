@@ -1,7 +1,7 @@
 {
   "name": "aiquota5h",
   "version": "1.1.0",
-  "description": "macOS 菜单栏 AI 订阅额度监控与安全周期激活工具",
+  "description": "macOS AI 订阅额度窗口到期自动激活工具，让下一轮计时不必等用户开工",
   "main": "index.js",
   "directories": {
     "doc": "docs",

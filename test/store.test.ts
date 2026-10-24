@@ -94,3 +94,41 @@ test("换账号使旧任务失效，令牌刷新不改变账号标识", () => {
   assert.equal(tasks[0]?.error_category, "account_changed");
   store.close();
 });
+
+test("升级到 65 秒同步旧计划，已发请求和历史去重记录保持不变", () => {
+  const file = tempDb();
+  const first = new Store(file);
+  const fact = pool();
+  first.savePool(fact, "{}");
+  const pending = first.claim(fact, fact.windows, 100_000)[0];
+  first.updateTasks([pending.id], { status: "deferred", message_result: "not_sent" }, 100_000);
+  const sentFact = { ...fact, poolId: "sent", windows: fact.windows.map((w) => ({ ...w, windowId: "sent:old" })) };
+  const sent = first.claim(sentFact, sentFact.windows, 100_000)[0];
+  first.updateTasks([sent.id], { status: "verifying", message_result: "accepted" }, 100_000);
+  first.setPhase([sent.id], "spawned", 100_000);
+  first.db.prepare("UPDATE windows SET due_at = old_ended_at + 120000").run();
+  first.db.prepare("UPDATE tasks SET due_at = old_ended_at + 120000").run();
+  first.setMeta("gracePolicyMs", "120000");
+  const prior = first.recentTasks(10).map(({ id, attempt_count, message_result }) => ({ id, attempt_count, message_result }));
+  first.close();
+
+  const second = new Store(file);
+  assert.equal(second.allWindows()[0].due_at, 66_000);
+  assert.equal(second.recentTasks().find((row) => row.id === pending.id)?.due_at, 66_000);
+  assert.equal(second.recentTasks().find((row) => row.id === sent.id)?.due_at, 121_000);
+  assert.deepEqual(second.recentTasks(10).map(({ id, attempt_count, message_result }) => ({ id, attempt_count, message_result })), prior);
+  assert.equal(second.getMeta("gracePolicyMs"), "65000");
+  assert.equal(second.claim(sentFact, sentFact.windows, 200_000).length, 0);
+  second.close();
+});
+
+test("新快照、保留旧边界与领取任务的计划时间统一使用 65 秒", () => {
+  const store = new Store(tempDb());
+  const fact = pool();
+  store.savePool(fact, "{}");
+  assert.equal(store.allWindows()[0].due_at, 66_000);
+  store.savePool({ ...fact, windows: fact.windows.map((w) => ({ ...w, state: "unknown", oldEndedAt: null })) }, "{}");
+  assert.equal(store.allWindows()[0].due_at, 66_000);
+  assert.equal(store.claim(fact, fact.windows, 66_000)[0].due_at, 66_000);
+  store.close();
+});

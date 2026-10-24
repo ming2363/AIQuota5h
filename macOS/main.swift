@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         stateItem.isEnabled = false
         menu.addItem(stateItem)
         menu.addItem(.separator())
-        let open = NSMenuItem(title: "打开额度管理…", action: #selector(openWindow), keyEquivalent: ",")
+        let open = NSMenuItem(title: "打开激活管理…", action: #selector(openWindow), keyEquivalent: ",")
         open.target = self
         menu.addItem(open)
         let logs = NSMenuItem(title: "打开日志", action: #selector(openLogs), keyEquivalent: "")
@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if window == nil {
             let host = NSHostingController(rootView: DashboardView(model: model))
             let created = NSWindow(contentViewController: host)
-            created.title = "AIQuota5h · 额度管理"
+            created.title = "AIQuota5h · 窗口自动激活"
             created.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             created.setContentSize(NSSize(width: 920, height: 780))
             created.minSize = NSSize(width: 800, height: 680)

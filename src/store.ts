@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { PoolFact, ProviderId, TaskStatus, WindowFact } from "./types.js";
+import { GRACE_MS, type PoolFact, type ProviderId, type TaskStatus, type WindowFact } from "./types.js";
 import { blocksActivation } from "./verify.js";
 
 export interface TaskRow {
@@ -55,6 +55,18 @@ export class Store {
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
     this.migrate();
     this.ensurePhase();
+    this.updateGracePolicy();
+  }
+
+  private updateGracePolicy(): void {
+    if (this.getMeta("gracePolicyMs") === String(GRACE_MS)) return;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("UPDATE windows SET due_at = old_ended_at + ? WHERE old_ended_at IS NOT NULL").run(GRACE_MS);
+      this.db.prepare("UPDATE tasks SET due_at = old_ended_at + ? WHERE status IN ('pending','deferred') AND phase = 'claimed' AND (message_result IS NULL OR message_result = 'not_sent')").run(GRACE_MS);
+      this.setMeta("gracePolicyMs", String(GRACE_MS));
+      this.db.exec("COMMIT");
+    } catch (error) { this.db.exec("ROLLBACK"); throw error; }
   }
 
   private ensurePhase(): void {
@@ -233,7 +245,7 @@ export class Store {
         }
       }
       for (const window of pool.windows) {
-        const dueAt = window.oldEndedAt == null ? null : window.oldEndedAt + 120_000;
+        const dueAt = window.oldEndedAt == null ? null : window.oldEndedAt + GRACE_MS;
         this.db.prepare(`
           INSERT INTO windows(
             provider, account_id, pool_id, window_key, window_id, kind, activation_mode, state,
@@ -260,7 +272,7 @@ export class Store {
             due_at = CASE
               WHEN excluded.old_ended_at IS NOT NULL THEN excluded.due_at
               WHEN excluded.state = 'active' THEN NULL
-              WHEN windows.old_ended_at IS NOT NULL THEN windows.old_ended_at + 120000
+              WHEN windows.old_ended_at IS NOT NULL THEN windows.old_ended_at + ${GRACE_MS}
               ELSE excluded.due_at
             END,
             remaining_fraction = excluded.remaining_fraction,
@@ -373,7 +385,7 @@ export class Store {
           expiredId,
           window.key,
           window.oldEndedAt,
-          (window.oldEndedAt as number) + 120_000,
+          (window.oldEndedAt as number) + GRACE_MS,
           now,
         );
         const row = this.db.prepare(

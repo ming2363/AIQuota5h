@@ -326,7 +326,7 @@ test("崩溃后的并发恢复至多一个持锁，释放不删除后继者", as
   await recovered.release();
 });
 
-test("Grok 当前周期不补发，周期切换满 120 秒只发一条", async () => {
+test("Grok 当前周期不补发，周期切换超过等待时间只发一条", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "aiquota5h-grok-due-"));
   const store = new Store(path.join(root, "state.sqlite"));
   let sends = 0;
