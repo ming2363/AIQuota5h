@@ -1,0 +1,10 @@
+{
+  "nodePath": "/opt/homebrew/bin/node",
+  "cli": {
+    "codex": "/opt/homebrew/bin/codex",
+    "grok": "/Users/zhangming/.local/bin/grok",
+    "agy": "/Users/zhangming/.local/bin/agy"
+  },
+  "refreshIntervalMs": 60000,
+  "graceMs": 120000
+}

@@ -1,0 +1,30 @@
+{
+  "name": "aiquota5h",
+  "version": "1.1.0",
+  "description": "macOS 菜单栏 AI 订阅额度监控与安全周期激活工具",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "start": "node dist/src/index.js",
+    "build:macos": "bash scripts/build-macos.sh",
+    "install:macos": "bash scripts/install-macos.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^5.9.3"
+  },
+  "private": true,
+  "engines": { "node": ">=24" },
+  "bin": {
+    "aiquota5h": "./dist/src/index.js"
+  }
+}
