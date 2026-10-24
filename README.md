@@ -1,33 +1,38 @@
-# AIQuota5h
+<p align="center">
+  <img src="docs/images/logo.png" alt="AIQuota5h 蓝色仪表盘 Logo" width="120" height="120">
+</p>
 
-macOS 菜单栏 AI 订阅额度管理工具。集中查看 **Codex、Claude Code、Antigravity 的 Gemini / Gemini 4 / Claude，以及 Grok Build** 的额度、重置时间和调用历史。
+<h1 align="center">AIQuota5h</h1>
 
-原生 SwiftUI 管理窗口 + 独立 TypeScript 后台。关闭窗口后后台继续运行；额度读取和到期自动激活分别开关。
+<p align="center">
+  <strong>少盯额度，多做事情。</strong>
+</p>
+
+<p align="center">
+  <a href="#安装原生应用">安装使用</a> ·
+  <a href="#接入范围">支持哪些平台</a> ·
+  <a href="#开发与验证">开发与验证</a>
+</p>
+
+<p align="center">
+  <img src="docs/images/benefits.svg" alt="额度一屏看清；到期自动检查，符合条件才激活；读取与激活记录可追溯" width="100%">
+</p>
+
+## 界面预览
 
 ![AIQuota5h 原生管理窗口演示](docs/images/dashboard-demo.png)
 
 *界面演示使用合成额度和虚构账号，不代表真实测量结果；Claude Code 当前仅支持监控。*
 
-## 能做什么
+## 自动处理流程
 
-- **额度概览**：按真实共享额度池展示剩余百分比、5 小时／周额度和重置倒计时。没有返回的数据标记为未知，历史快照和读取失败明确显示。
-- **自动读取**：每分钟读取一次；按渠道关闭或开启，支持手动请求刷新。手动刷新继续遵守开关、请求去重与限流退避。
-- **自动激活**：按额度池控制。仅在旧周期结束满 120 秒、账号和费用条件通过且未发生重复发送时，才可能发送一条短消息。
-- **完整记录**：额度读取与自动激活分开翻页，显示时间、耗时、结果、确认状态与原因；开关和历史跨重启保存。
-- **菜单栏常驻**：窗口关闭后继续工作，支持单独设置管理界面登录时启动。后台服务安装后默认随登录启动。
+![后台定时读取、到期复核、条件检查、单次激活和结果核验；未通过条件时保持等待](docs/images/automation.svg)
 
 ## 接入范围
 
-| 渠道 | 显示的额度 | 到期自动激活 |
-| --- | --- | --- |
-| Codex，ChatGPT 订阅登录 | 服务端返回的 5 小时、周额度及额度池 | 已接入；仍须通过窗口与费用检查 |
-| Claude Code，官方订阅 OAuth | 5 小时、所有模型周额度，以及服务端返回的 Sonnet / Opus / OAuth 应用周限制 | **当前仅监控**，发送隔离和额外计费未完成验证 |
-| Antigravity Gemini | Gemini 共享 5 小时和周额度 | 已有保护流程；当前 agy 缺少调用级隔离开关，实际发送被阻止 |
-| Antigravity Claude / GPT-OSS | 共享 5 小时和周额度 | 同上；与独立 Claude Code 分开统计 |
-| Antigravity Gemini 4 Argon | 独立周额度 | 由服务端返回的周期方式决定，不伪造 5 小时额度 |
-| Grok Build | 服务端提供的周额度及重置时间 | 已有周期检查；当前未证明费用边界，实际仅监控 |
+![Codex、Claude Code、Antigravity 和 Grok 的接入关系、额度周期与当前激活能力](docs/images/support-map.svg)
 
-模型名、额度池和限制会随服务端变化。本工具展示读取结果，不预设每个模型都有一份独立额度。Claude 官方的订阅额度也与其聊天等产品共享，见[官方说明](https://support.claude.com/en/articles/11647753-how-do-usage-and-length-limits-work)。
+[接入细节与限制](docs/ADAPTERS.md) · [Claude 官方额度说明](https://support.claude.com/en/articles/11647753-how-do-usage-and-length-limits-work)
 
 ## 安装原生应用
 

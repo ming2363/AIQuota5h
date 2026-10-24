@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="840" viewBox="0 0 1120 840" role="img" aria-labelledby="title desc">
+<title id="title">平台接入关系</title><desc id="desc">AIQuota5h分别读取Codex、Claude Code官方订阅、Antigravity和Grok。Codex显示5小时和周额度并支持条件激活；Claude只读；Antigravity的Gemini和Claude共享池分别显示5小时及周额度，Gemini4 Argon仅周额度；Antigravity隔离待验证，Grok费用待验证。</desc>
+<style>text{font-family:"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif}</style>
+<defs><marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0L10 3.5L0 7Z" fill="#2563eb"/></marker></defs>
+<rect x="1" y="1" width="1118" height="838" rx="24" fill="#f8fbff" stroke="#dce6f1"/>
+<text x="40" y="56" font-size="32" fill="#14253f" font-weight="700" text-anchor="start">多平台，一个入口。</text>
+<text x="40" y="91" font-size="19" fill="#64748b" font-weight="400" text-anchor="start">按实际渠道与共享额度池展示</text>
+<path d="M288 422H356M356 195V722" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M356 195H430" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M430.0 195.0L420.0 198.5L420.0 191.5Z" fill="#2563eb"/>
+<path d="M356 335H430" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M430.0 335.0L420.0 338.5L420.0 331.5Z" fill="#2563eb"/>
+<path d="M356 525H430" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M430.0 525.0L420.0 528.5L420.0 521.5Z" fill="#2563eb"/>
+<path d="M356 722H430" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M430.0 722.0L420.0 725.5L420.0 718.5Z" fill="#2563eb"/>
+<rect x="40" y="351" width="248" height="142" rx="16" fill="white" stroke="#dce6f1"/>
+<path d="M40 381H288" fill="none" stroke="#dce6f1" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="56" cy="366" r="3.5" fill="#d5dde7" stroke="none"/>
+<circle cx="69" cy="366" r="3.5" fill="#d5dde7" stroke="none"/>
+<circle cx="82" cy="366" r="3.5" fill="#d5dde7" stroke="none"/>
+<text x="274" y="372" font-size="13" fill="#64748b" font-weight="500" text-anchor="end">macOS</text>
+<circle cx="83" cy="419" r="24" fill="#2563eb" stroke="none"/>
+<path d="M71 430v-9m12 9v-17m12 17v-25" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="121" y="419" font-size="23" fill="#14253f" font-weight="700" text-anchor="start">AIQuota5h</text>
+<text x="121" y="451" font-size="16" fill="#64748b" font-weight="400" text-anchor="start">菜单栏 / 管理窗口</text>
+<rect x="440" y="137" width="640" height="116" rx="16" fill="white" stroke="#dce6f1"/>
+<circle cx="481" cy="180" r="19" fill="#0f9f82" stroke="none"/>
+<text x="515" y="187" font-size="23" fill="#14253f" font-weight="700" text-anchor="start">Codex</text>
+<rect x="515" y="205" width="68" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="549.0" y="226" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">5h</text>
+<rect x="595" y="205" width="68" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="629.0" y="226" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">7d</text>
+<rect x="872" y="177" width="184" height="30" rx="15" fill="#e8f7ef" stroke="none"/>
+<text x="964.0" y="198" font-size="16" fill="#047857" font-weight="600" text-anchor="middle">条件激活</text>
+<rect x="440" y="277" width="640" height="116" rx="16" fill="white" stroke="#dce6f1"/>
+<circle cx="481" cy="320" r="19" fill="#d97757" stroke="none"/>
+<text x="515" y="327" font-size="23" fill="#14253f" font-weight="700" text-anchor="start">Claude Code</text>
+<rect x="515" y="345" width="68" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="549.0" y="366" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">5h</text>
+<rect x="595" y="345" width="68" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="629.0" y="366" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">7d</text>
+<text x="686" y="366" font-size="15" fill="#64748b" font-weight="400" text-anchor="start">官方订阅 OAuth</text>
+<rect x="920" y="317" width="136" height="30" rx="15" fill="#fff7e8" stroke="none"/>
+<text x="988.0" y="338" font-size="16" fill="#b45309" font-weight="600" text-anchor="middle">只读</text>
+<rect x="440" y="417" width="640" height="222" rx="16" fill="white" stroke="#dce6f1"/>
+<circle cx="481" cy="460" r="19" fill="#4285f4" stroke="none"/>
+<text x="515" y="467" font-size="23" fill="#14253f" font-weight="700" text-anchor="start">Antigravity</text>
+<rect x="858" y="439" width="198" height="30" rx="15" fill="#fff7e8" stroke="none"/>
+<text x="957.0" y="460" font-size="16" fill="#b45309" font-weight="600" text-anchor="middle">隔离待验证</text>
+<rect x="464" y="496" width="184" height="117" rx="12" fill="#f8fbff" stroke="#e5edf6"/>
+<text x="556.0" y="528" font-size="17" fill="#14253f" font-weight="600" text-anchor="middle">Gemini</text>
+<rect x="480" y="555" width="64" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="512.0" y="576" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">5h</text>
+<rect x="568" y="555" width="64" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="600.0" y="576" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">7d</text>
+<rect x="664" y="496" width="184" height="117" rx="12" fill="#f8fbff" stroke="#e5edf6"/>
+<text x="756.0" y="528" font-size="17" fill="#14253f" font-weight="600" text-anchor="middle">Claude / GPT-OSS</text>
+<rect x="680" y="555" width="64" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="712.0" y="576" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">5h</text>
+<rect x="768" y="555" width="64" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="800.0" y="576" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">7d</text>
+<rect x="864" y="496" width="192" height="117" rx="12" fill="#f8fbff" stroke="#e5edf6"/>
+<text x="960.0" y="528" font-size="17" fill="#14253f" font-weight="600" text-anchor="middle">Gemini 4 Argon</text>
+<rect x="924.0" y="555" width="72" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="960.0" y="576" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">7d</text>
+<rect x="440" y="663" width="640" height="116" rx="16" fill="white" stroke="#dce6f1"/>
+<circle cx="481" cy="706" r="19" fill="#334155" stroke="none"/>
+<text x="515" y="713" font-size="23" fill="#14253f" font-weight="700" text-anchor="start">Grok Build</text>
+<rect x="515" y="731" width="68" height="30" rx="15" fill="#eff6ff" stroke="none"/>
+<text x="549.0" y="752" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">7d</text>
+<rect x="858" y="701" width="198" height="30" rx="15" fill="#fff7e8" stroke="none"/>
+<text x="957.0" y="722" font-size="16" fill="#b45309" font-weight="600" text-anchor="middle">费用待验证</text>
+<text x="40" y="807" font-size="16" fill="#64748b" font-weight="400" text-anchor="start">5h = 5 小时额度    7d = 周额度</text>
+<text x="1080" y="807" font-size="15" fill="#64748b" font-weight="400" text-anchor="end">代理 / API 入口不等于官方订阅</text>
+</svg>
