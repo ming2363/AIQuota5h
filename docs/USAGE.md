@@ -26,6 +26,13 @@ npm run install:macos
 
 应用复用各客户端已有登录态，不要求把密钥填写到界面。Claude Code 若配置了代理、API Key 或云供应商入口，将显示无法读取官方订阅额度；本工具不会修改该配置或自动刷新登录凭证。
 
+## 退出与重新打开
+
+- **退出管理界面（后台继续运行）**：只关闭菜单栏和窗口，后台继续自动处理。
+- **完全退出（同时停止后台）**：停止并卸载本次登录会话中的后台服务，再关闭界面；后台不会被 KeepAlive 自动拉起。保留配置、历史和原有登录启动设置。
+
+下次手动打开 `AIQuota5h.app` 时，会自动恢复后台。停止失败时管理界面保持打开并显示错误，便于重试。
+
 界面每 5 秒同步本机状态，菜单栏在窗口关闭后每 15 秒同步。它们不会另起一套额度采集器。历史仅包括本工具的额度读取和激活任务，不能列出其他客户端的所有聊天调用。旧版本没有逐次额度读取记录，升级前无法补回。
 
 重复安装会保留现有后台配置。应用是本机构建的 ad-hoc 签名，尚未提供 Apple Developer ID 公证或跨机器安装包。构建脚本针对已验证的 CLT Swift 6.2.4 / SDK 6.2.3 组合提供本地兼容层，不修改系统 SDK；其他不匹配组合应安装匹配的 Xcode 工具。
@@ -49,6 +56,8 @@ npm run build
 npm test
 node dist/src/index.js install
 node dist/src/index.js status
+node dist/src/index.js start
+node dist/src/index.js stop
 node dist/src/index.js dashboard
 node dist/src/index.js history 0
 node dist/src/index.js reads 0

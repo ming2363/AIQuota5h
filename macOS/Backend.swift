@@ -22,9 +22,10 @@ enum Backend {
             process.standardOutput = output
             process.standardError = errors
             try process.run()
-            // Commands only read local state or enqueue work; they never wait on a provider.
+            // Service lifecycle commands wait for the daemon; quota collection stays in the daemon.
+            let timeoutSeconds = ["start", "stop"].contains(arguments.first ?? "") ? 25 : 12
             let timeout = DispatchWorkItem { if process.isRunning { process.terminate() } }
-            DispatchQueue.global().asyncAfter(deadline: .now() + 12, execute: timeout)
+            DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(timeoutSeconds), execute: timeout)
             let data = output.fileHandleForReading.readDataToEndOfFile()
             let errorData = errors.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()

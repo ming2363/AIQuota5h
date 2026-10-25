@@ -42,6 +42,8 @@ npm run install:macos
 
 打开 `~/Applications/AIQuota5h.app`，按额度池开启「到期自动激活」。后台会持续运行，关闭管理窗口后仍继续处理。
 
+菜单栏可选择「退出管理界面」或「完全退出（同时停止后台）」；再次打开应用即自动恢复后台，保留配置与历史。[查看操作说明](docs/USAGE.md#退出与重新打开)
+
 ## 使用文档
 
 [安装与操作](docs/USAGE.md) · [平台接入](docs/ADAPTERS.md)

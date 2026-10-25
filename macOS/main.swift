@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var window: NSWindow?
     private var timer: Timer?
     private var lastPoll = Date.distantPast
+    private var fullyExiting = false
+    private var startupTask: Task<Void, Never>?
+    private let fullQuitItem = NSMenuItem(title: "完全退出（同时停止后台）", action: #selector(quitEverything), keyEquivalent: "")
     private let stateItem = NSMenuItem(title: "正在读取状态…", action: nil, keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -21,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = NSImage(systemSymbolName: "gauge.with.dots.needle.50percent", accessibilityDescription: "AIQuota5h")
         let menu = NSMenu()
+        menu.autoenablesItems = false
         stateItem.isEnabled = false
         menu.addItem(stateItem)
         menu.addItem(.separator())
@@ -34,14 +38,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let quit = NSMenuItem(title: "退出管理界面（后台继续运行）", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
+        fullQuitItem.target = self
+        menu.addItem(fullQuitItem)
         statusItem.menu = menu
         model.onUpdate = { [weak self] in
-            guard let self, let data = model.dashboard else { return }
+            guard let self, !self.fullyExiting, let data = model.dashboard else { return }
             self.stateItem.title = data.running ? "后台运行中 · \(data.pools.count) 个额度池" : "后台未运行"
         }
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, !self.fullyExiting else { return }
                 if self.window?.isVisible == true || Date().timeIntervalSince(self.lastPoll) >= 15 {
                     self.lastPoll = Date()
                     await self.model.reload()
@@ -49,7 +55,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
         if !CommandLine.arguments.contains("--background") { openWindow() }
-        Task { await model.reload() }
+        startupTask = Task {
+            do {
+                _ = try await Backend.run(["start"])
+                await model.reload()
+            } catch {
+                await model.reload()
+                model.error = "后台恢复失败：\(error.localizedDescription)"
+                openWindow()
+            }
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -77,7 +92,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) { NSApp.setActivationPolicy(.accessory) }
     @objc func openLogs() { model.revealLogs() }
-    @objc func quitApp() { NSApp.terminate(nil) }
+    @objc func quitApp() {
+        guard !fullyExiting else { return }
+        NSApp.terminate(nil)
+    }
+    @objc func quitEverything() {
+        guard !fullyExiting else { return }
+        fullyExiting = true
+        fullQuitItem.isEnabled = false
+        stateItem.title = "正在停止后台…"
+        Task {
+            // Finish any in-progress startup first, so it cannot restart after stop succeeds.
+            await startupTask?.value
+            do {
+                _ = try await Backend.run(["stop"])
+                NSApp.terminate(nil)
+            } catch {
+                fullyExiting = false
+                fullQuitItem.isEnabled = true
+                await model.reload()
+                model.error = "完全退出失败：\(error.localizedDescription)"
+                openWindow()
+            }
+        }
+    }
 }
 
 MainActor.assumeIsolated {

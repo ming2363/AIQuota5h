@@ -17,10 +17,16 @@ import { GRACE_MS, type PoolFact, type SendResult, type WindowFact } from "./typ
 import { blocksActivation } from "./verify.js";
 import { dashboard, readHistory, taskHistory } from "./dashboard.js";
 import { requestRefresh, updateControl } from "./controls.js";
+import { controlService } from "./service.js";
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   const command = argv[0] || "status";
   if (command === "daemon") return daemon();
+  if (command === "start" || command === "stop") {
+    await controlService(command);
+    console.log(JSON.stringify({ ok: true, running: command === "start" }));
+    return 0;
+  }
   if (["dashboard", "history", "reads", "control", "refresh"].includes(command)) {
     const paths = runtimePaths();
     const store = new Store(paths.db);
@@ -45,7 +51,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (command === "resume") return setPaused(false);
   if (command === "install") return install();
   if (command === "uninstall") return uninstall(argv.includes("--purge-data"));
-  console.log("用法: aiquota5h <daemon|status|dashboard|history|reads|refresh|control|doctor|pause|resume|install|uninstall>");
+  console.log("用法: aiquota5h <daemon|start|stop|status|dashboard|history|reads|refresh|control|doctor|pause|resume|install|uninstall>");
   return 2;
 }
 
