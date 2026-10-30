@@ -39,9 +39,9 @@ export function dashboard(store: Store, running: boolean, now = Date.now()) {
       stale: now - Number(row.observed_at) > 180_000,
       billingSafety: String(row.billing_safety), blockReason: row.block_reason ? redactText(String(row.block_reason)) : null,
       guards: guards.map((task) => task.id),
-      autoActivate: row.provider !== "claude" && store.getMeta(`activate:${row.provider}:${row.pool_id}`) !== "0",
+      autoActivate: store.getMeta(`activate:${row.provider}:${row.pool_id}`) !== "0",
       monitoring: store.monitoring(String(row.provider)),
-      activationSupported: row.provider !== "claude",
+      activationSupported: true,
       lastRead: store.db.prepare("SELECT status, detail, started_at AS startedAt, finished_at AS finishedAt FROM provider_reads WHERE provider = ? ORDER BY id DESC LIMIT 1").get(String(row.provider)) || null,
       windows: related.map((window) => ({
         id: window.window_key, name: window.window_key === "5h" ? "5 小时额度" : window.window_key === "weekly" ? "周额度" : window.kind,

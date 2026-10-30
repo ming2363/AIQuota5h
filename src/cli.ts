@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,10 +18,13 @@ import { blocksActivation } from "./verify.js";
 import { dashboard, readHistory, taskHistory } from "./dashboard.js";
 import { requestRefresh, updateControl } from "./controls.js";
 import { controlService } from "./service.js";
+import { readClaude, sendClaude } from "./providers/claude.js";
+import { CLAUDE_SETTINGS, claudeConfigDir, claudeEnvironment, readClaudeKeychain, saveClaudeOAuth } from "./providers/claude-auth.js";
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   const command = argv[0] || "status";
   if (command === "daemon") return daemon();
+  if (command === "claude-login") return claudeLogin();
   if (command === "start" || command === "stop") {
     await controlService(command);
     console.log(JSON.stringify({ ok: true, running: command === "start" }));
@@ -51,7 +54,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (command === "resume") return setPaused(false);
   if (command === "install") return install();
   if (command === "uninstall") return uninstall(argv.includes("--purge-data"));
-  console.log("用法: aiquota5h <daemon|start|stop|status|dashboard|history|reads|refresh|control|doctor|pause|resume|install|uninstall>");
+  console.log("用法: aiquota5h <daemon|start|stop|claude-login|status|dashboard|history|reads|refresh|control|doctor|pause|resume|install|uninstall>");
   return 2;
 }
 
@@ -78,6 +81,10 @@ async function daemon(): Promise<number> {
       try {
         if (pool.provider === "codex") return readCodexAccountId().accountId === pool.accountId;
         if (pool.provider === "grok") return readGrokIdentity().userId === pool.accountId;
+        if (pool.provider === "claude") {
+          const current = await readClaude();
+          return "accountId" in current && current.accountId === pool.accountId;
+        }
         const agy = loadConfig().cli.agy;
         if (!agy) return false;
         return confirmAgyAccount(agy, pool.accountId);
@@ -147,7 +154,25 @@ async function sendPool(pool: PoolFact, workDir: string, signal?: AbortSignal): 
   if (pool.provider === "codex" && config.cli.codex) return sendCodex(request, config.cli.codex, signal);
   if (pool.provider === "antigravity" && config.cli.agy) return sendAntigravity(request, config.cli.agy, signal);
   if (pool.provider === "grok" && config.cli.grok) return sendGrok(request, config.cli.grok, signal);
+  if (pool.provider === "claude") return sendClaude(request, config.cli.claude || "/opt/homebrew/bin/claude", signal);
   return { outcome: "not_sent", sessionId: null, detail: "CLI 路径缺失", started: false };
+}
+
+async function claudeLogin(): Promise<number> {
+  const dir = claudeConfigDir();
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  console.log("在浏览器中登录 Claude 官方 Pro/Max 订阅。此登录独立于原有代理配置。");
+  const child = spawn(loadConfig().cli.claude || "/opt/homebrew/bin/claude", ["--setting-sources", "", "--settings", CLAUDE_SETTINGS, "auth", "login", "--claudeai"], {
+    cwd: dir, env: claudeEnvironment(dir), stdio: "inherit",
+  });
+  const code = await new Promise<number>((resolve, reject) => { child.once("error", reject); child.once("exit", (status) => resolve(status ?? 1)); });
+  if (code !== 0) return code;
+  const oauth = await readClaudeKeychain(dir);
+  if (oauth) saveClaudeOAuth(dir, oauth);
+  const current = await readClaude();
+  if ("category" in current) throw new Error(current.message);
+  console.log(`Claude 独立订阅登录完成：${maskEmail(current.accountLabel)}。${current.pools[0].billingSafety === "subscription_only" ? "额外付费未开启，可以按开关自动激活。" : "请先在 Claude 设置中核对并关闭额外付费，再启用自动激活。"}`);
+  return 0;
 }
 
 async function status(): Promise<number> {
@@ -234,6 +259,7 @@ function doctor(): number {
     `sqlite: node:sqlite`,
     `配置: ${fs.existsSync(paths.config) ? paths.config : "未安装，使用内置路径"}`,
     `Codex: ${exists(config.cli.codex)}`,
+    `Claude: ${exists(config.cli.claude || "/opt/homebrew/bin/claude")}`,
     `Grok: ${exists(config.cli.grok)}`,
     `agy: ${exists(config.cli.agy)}`,
     `LaunchAgent: ${fs.existsSync(launchAgentPath()) ? launchAgentPath() : "未安装"}`,
@@ -278,6 +304,7 @@ function install(): number {
     nodePath: process.execPath,
     cli: {
       codex: whichAbs("codex") || "/opt/homebrew/bin/codex",
+      claude: whichAbs("claude") || "/opt/homebrew/bin/claude",
       grok: whichAbs("grok") || path.join(os.homedir(), ".local", "bin", "grok"),
       agy: whichAbs("agy") || path.join(os.homedir(), ".local", "bin", "agy"),
     },

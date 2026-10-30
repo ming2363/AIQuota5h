@@ -187,7 +187,7 @@ export class Store {
   }
 
   activating(provider: string, poolId: string): boolean {
-    return provider !== "claude" && this.monitoring(provider) && this.getMeta(`activate:${provider}:${poolId}`) !== "0";
+    return this.monitoring(provider) && this.getMeta(`activate:${provider}:${poolId}`) !== "0";
   }
 
   startRead(provider: string, reason: string, at: number): number {

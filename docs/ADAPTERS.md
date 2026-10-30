@@ -21,15 +21,16 @@
 - 发送参数：`-a never` 在 `exec` 之前；其后使用 `--ignore-user-config`、`--disable` 和只读沙箱。本机 `codex <完整参数> --help` 退出码为 0。不用危险绕过参数。
 - App 关闭：读取走 CLI app-server，不需要图形程序保持打开。桌面端与 CLI 默认共用 `~/.codex/auth.json`。
 
-## Claude Code（2026-10-24 新增，只读）
+## Claude Code（2026-10-31 更新，独立官方订阅）
 
-- 官方订阅登录态从 Claude 配置目录的 `.credentials.json` 或 macOS `Claude Code-credentials` 钥匙串项读取，令牌仅保留在内存。自定义 `CLAUDE_CONFIG_DIR` 使用该 CLI 的服务名哈希规则。
-- 只请求官方 `https://api.anthropic.com/api/oauth/profile` 和 `/api/oauth/usage`；账号 UUID 来自同一令牌的官方账号响应，不把 token 哈希当账号。
-- 这些路径来自本机官方 Claude Code 2.1.83 实现，属于客户端使用的接口，不能视为承诺稳定的公开 API。接口或凭证格式变化会导致读取失败，不降级为伪造数据。
-- 展示 `five_hour`、`seven_day`、`seven_day_sonnet`、`seven_day_opus`、`seven_day_oauth_apps` 中实际存在的额度。`utilization` 按百分比处理，缺失、类型错误或越界值显示未知。
-- 检测到代理 Base URL、API Key、认证令牌覆盖或 Bedrock / Vertex / Foundry 模式时，停止官方订阅读取，不改写任何用户配置、不替换登录态。凭证过期只报告重新登录，不自行刷新或保存 token。
-- **没有接入发送器**：调用级隔离和额外费用尚未验证，前后端都拒绝开启 Claude 自动激活。此限制不会影响现有三个渠道。
-- 官方关于五小时／周额度共享的说明：[Claude Help Center](https://support.claude.com/en/articles/11647753-how-do-usage-and-length-limits-work)。
+- `claude-login` 调用官方 `claude auth login --claudeai`，使用工具专属 `CLAUDE_CONFIG_DIR`。登录后从带目录哈希后缀的 macOS 钥匙串读取凭证并写入独立目录的 `.credentials.json`（目录 0700、文件 0600）；原有 `~/.claude/` 代理配置保持不变。
+- 读取官方 `/api/oauth/profile` 与 `/api/oauth/usage`，账号 UUID、套餐类型及额外付费状态来自同一令牌。仅个人 `claude_pro` / `claude_max` 且额外付费明确关闭时标记 `subscription_only`；任一来源明确开启额外付费都阻止发送。
+- 即将过期的独立凭证通过官方 CLI 使用的 `https://platform.claude.com/v1/oauth/token` 续期；合并并发续期，原子保存旋转后的令牌，失败不覆盖原凭证。API 路径与公开客户端 ID 核对自本机官方 Claude Code 2.1.83，属于客户端实现细节，变化时停止读取／发送，不伪造成功。
+- 展示服务端实际返回的 `five_hour`、`seven_day` 及模型周额度；百分比非法时显示未知。保存同账号同额度池的旧 5 小时边界，窗口结束满 65 秒后复核；首次没有旧边界时先监控。周额度是固定重置，只作额度约束，不额外发送周激活消息。
+- 发送用同一已核验的 OAuth token 临时注入官方 CLI，只使用 Sonnet 别名。环境白名单不继承代理 API 凭证或模型覆盖。参数禁用设置来源、MCP、工具、技能、Chrome、会话保存；专用设置禁用 hooks、自动记忆、fast mode。发现受管配置则暂不发送。运行目录由调度器单独创建。
+- 每次发送前复核账号、费用和额度，再解析 CLI 的 `result / success / is_error=false`。回合完成后仍由额度观测确认窗口启动；空输出、超时或失败回合均视为已启动但未知，保留防重发保护。
+- 页面支持 Claude 独立读取与自动激活开关，历史记录与现有渠道共用。
+- 官方参考：[CLI 参数](https://code.claude.com/docs/en/cli-reference)、[Pro / Max 登录](https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan)、[固定周重置](https://support.claude.com/en/articles/11049741-what-is-the-max-plan)、[额外用量](https://support.claude.com/en/articles/12429409-manage-usage-credits-for-paid-claude-plans)。
 
 ## Antigravity
 

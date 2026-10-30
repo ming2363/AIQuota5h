@@ -30,7 +30,7 @@ export function createProviderRead(options: ProviderReadFactory = {}): (
       return Promise.resolve({ provider, category: "unavailable", message: "读取已取消", retryAfterMs: 15_000 });
     }
     const cli = config().cli;
-    if (provider === "claude") return (options.readClaude ?? readClaude)({ now: now(), signal });
+    if (provider === "claude") return (options.readClaude ?? readClaude)({ now: now(), signal, priors: options.priorsFor?.("claude") || [] });
     if (provider === "codex") {
       return readCodexImpl({
         command: cli.codex || "codex",

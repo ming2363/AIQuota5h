@@ -18,6 +18,7 @@ export function loadConfig(): AppConfig {
     nodePath: process.execPath,
     cli: {
       codex: "/opt/homebrew/bin/codex",
+      claude: "/opt/homebrew/bin/claude",
       grok: path.join(os.homedir(), ".local", "bin", "grok"),
       agy: path.join(os.homedir(), ".local", "bin", "agy"),
     },

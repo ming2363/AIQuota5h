@@ -190,7 +190,7 @@ struct DashboardView: View {
             Section("到期自动激活") {
                 Text("在额度概览中按额度池开关。开启后，仅在旧周期结束满 65 秒、账号和费用条件通过且没有重复请求时发送一条短消息。")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Claude Code 当前仅支持监控；Antigravity 和 Grok 的实际发送取决于调用隔离和费用验证结果。")
+                Text("Claude Code 使用独立官方订阅登录，自动接续 5 小时窗口，周额度按官方时间恢复。Antigravity 和 Grok 的实际发送取决于调用隔离和费用验证结果。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("后台服务") {

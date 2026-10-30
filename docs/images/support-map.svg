@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1120" height="840" viewBox="0 0 1120 840" role="img" aria-labelledby="title desc">
-<title id="title">平台接入关系</title><desc id="desc">AIQuota5h分别读取Codex、Claude Code官方订阅、Antigravity和Grok。Codex显示5小时和周额度并支持条件激活；Claude只读；Antigravity的Gemini和Claude共享池分别显示5小时及周额度，Gemini4 Argon仅周额度；Antigravity隔离待验证，Grok费用待验证。</desc>
+<title id="title">平台接入关系</title><desc id="desc">AIQuota5h分别读取Codex、Claude Code官方订阅、Antigravity和Grok。Codex支持条件激活；Claude独立官方订阅支持5小时条件激活，周额度固定恢复；Antigravity的Gemini和Claude共享池分别显示5小时及周额度，Gemini4 Argon仅周额度；Antigravity隔离待验证，Grok费用待验证。</desc>
 <style>text{font-family:"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif}</style>
 <defs><marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0L10 3.5L0 7Z" fill="#2563eb"/></marker></defs>
 <rect x="1" y="1" width="1118" height="838" rx="24" fill="#f8fbff" stroke="#dce6f1"/>
@@ -41,8 +41,8 @@
 <rect x="595" y="345" width="68" height="30" rx="15" fill="#eff6ff" stroke="none"/>
 <text x="629.0" y="366" font-size="16" fill="#2563eb" font-weight="600" text-anchor="middle">7d</text>
 <text x="686" y="366" font-size="15" fill="#64748b" font-weight="400" text-anchor="start">官方订阅 OAuth</text>
-<rect x="920" y="317" width="136" height="30" rx="15" fill="#fff7e8" stroke="none"/>
-<text x="988.0" y="338" font-size="16" fill="#b45309" font-weight="600" text-anchor="middle">只读</text>
+<rect x="872" y="317" width="184" height="30" rx="15" fill="#e8f7ef" stroke="none"/>
+<text x="964.0" y="338" font-size="16" fill="#047857" font-weight="600" text-anchor="middle">5h 条件激活</text>
 <rect x="440" y="417" width="640" height="222" rx="16" fill="white" stroke="#dce6f1"/>
 <circle cx="481" cy="460" r="19" fill="#4285f4" stroke="none"/>
 <text x="515" y="467" font-size="23" fill="#14253f" font-weight="700" text-anchor="start">Antigravity</text>

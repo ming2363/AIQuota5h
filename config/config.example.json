@@ -2,6 +2,7 @@
   "nodePath": "/opt/homebrew/bin/node",
   "cli": {
     "codex": "/opt/homebrew/bin/codex",
+    "claude": "/opt/homebrew/bin/claude",
     "grok": "/Users/zhangming/.local/bin/grok",
     "agy": "/Users/zhangming/.local/bin/agy"
   },

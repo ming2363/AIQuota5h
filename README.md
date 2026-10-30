@@ -44,6 +44,8 @@ npm run install:macos
 
 菜单栏可选择「退出管理界面」或「完全退出（同时停止后台）」；再次打开应用即自动恢复后台，保留配置与历史。[查看操作说明](docs/USAGE.md#退出与重新打开)
 
+Claude 官方 Pro / Max 可使用独立订阅登录自动接续 5 小时窗口，同时保留原有代理配置。[接入 Claude](docs/USAGE.md#claude-官方订阅)
+
 ## 使用文档
 
 [安装与操作](docs/USAGE.md) · [平台接入](docs/ADAPTERS.md)

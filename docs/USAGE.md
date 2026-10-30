@@ -24,7 +24,23 @@ npm run install:macos
 2. **额度概览 → 到期自动激活**：按额度池选择是否允许到期发送。开启只代表允许后台检查，不代表费用或窗口条件已经满足。
 3. **调用历史**：切换“额度读取／自动激活”，查看每次操作及历史结果。
 
-应用复用各客户端已有登录态，不要求把密钥填写到界面。Claude Code 若配置了代理、API Key 或云供应商入口，将显示无法读取官方订阅额度；本工具不会修改该配置或自动刷新登录凭证。
+应用复用各客户端已有登录态，不要求把密钥填写到界面。Claude Code 官方订阅使用下面的独立登录，保留原有代理、插件和日常配置。
+
+## Claude 官方订阅
+
+运行一次官方登录，并在浏览器中选择已购买 Pro / Max 的账号：
+
+```bash
+node dist/src/index.js claude-login
+```
+
+安装后也可运行 `node "$HOME/Library/Application Support/AIQuota5h/app/index.js" claude-login`。登录成功后，在管理窗口中打开 Claude Code 的「自动读取额度」和「到期自动激活」。
+
+独立配置保存在 `~/Library/Application Support/AIQuota5h/claude-subscription/`，不修改 `~/.claude/` 的第三方代理。专用 OAuth 凭证以仅当前用户可读写的文件保存；续期只更新该独立登录。不要分享或提交此目录。
+
+后台记录当前 5 小时窗口边界；窗口结束满 65 秒后复核，满足条件时通过官方 Claude Code 向 Sonnet 发送一条短消息，再核验新窗口。首次接入但没有旧边界时先监控；如果用户已经手动使用、新窗口正在运行，便跳过本轮发送。Claude 周额度按官方固定时间自动恢复，显示余额并约束发送，不通过额外消息改变周重置时间。
+
+仅在官方个人 Pro / Max 订阅、额外付费明确关闭、返回的各额度均可用时允许自动激活。额外付费开启、缺少必要额度字段、受管配置无法隔离、登录失效或账号变化时停止发送并记录原因。发送禁用工具、技能、MCP、Chrome 集成、插件来源、钩子和会话保存；请求结果不明时不会重发。
 
 ## 退出与重新打开
 
@@ -58,6 +74,7 @@ node dist/src/index.js install
 node dist/src/index.js status
 node dist/src/index.js start
 node dist/src/index.js stop
+node dist/src/index.js claude-login
 node dist/src/index.js dashboard
 node dist/src/index.js history 0
 node dist/src/index.js reads 0

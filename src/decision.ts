@@ -39,7 +39,8 @@ export function decide(pool: PoolFact, now: number, graceMs = GRACE_MS): Decisio
   if (blockingUnknown.length > 0) {
     return block("window_state_unknown", blockingUnknown, billingBlocksSend);
   }
-  const rollover = pool.windows.filter((window) => window.activationMode === "auto_reset" && window.oldEndedAt != null && window.allowance === "allowed");
+  // Independent weekly caps do not trigger an extra request while a usage-started session is already active.
+  const rollover = pool.windows.filter((window) => window.activationMode === "auto_reset" && (window.sharesRequest || targets.length === 0) && window.oldEndedAt != null && window.allowance === "allowed");
   if (idle.length === 0 && rollover.length > 0) {
     const dueAt = Math.max(...rollover.map((window) => (window.oldEndedAt as number) + graceMs));
     const keys = rollover.map((window) => window.key);

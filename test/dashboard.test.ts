@@ -27,7 +27,7 @@ function fixture(t: { after: (fn: () => void) => void }) {
   return { dir, db, store, snapshot };
 }
 
-test("开关跨进程持久化，校验渠道、额度池和只读能力", (t) => {
+test("开关跨进程持久化，校验渠道、额度池，Claude 可单独开关", (t) => {
   const { store, db } = fixture(t);
   updateControl(store, ["monitor", "codex", "off"]);
   updateControl(store, ["activate", "codex", "off", "codex"]);
@@ -43,7 +43,11 @@ test("开关跨进程持久化，校验渠道、额度池和只读能力", (t) =
     assert.throws(() => updateControl(store, ["activate", "codex", "on", "unknown-pool"]));
     const claude = mapClaudeUsage({ five_hour: { utilization: 10, resets_at: new Date(NOW + 10_000).toISOString() } }, "claude-account", "c", NOW);
     store.savePool(claude.pools[0], "");
-    assert.throws(() => updateControl(store, ["activate", "claude", "on", "claude-subscription"]));
+    updateControl(store, ["activate", "claude", "on", "claude-subscription"]);
+    assert.equal(second.activating("claude", "claude-subscription"), true);
+    assert.equal(dashboard(store, true, NOW).pools.find((p) => p.provider === "claude")?.activationSupported, true);
+    updateControl(store, ["activate", "claude", "off", "claude-subscription"]);
+    assert.equal(second.activating("claude", "claude-subscription"), false);
   } finally { second.close(); }
 });
 
