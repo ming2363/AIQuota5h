@@ -5,6 +5,7 @@ import { runCommand } from "../proc.js";
 import { classifyWindow, type PriorWindow } from "../decision.js";
 import type { ProviderReadError, ProviderSnapshot, SendRequest, SendResult, WindowFact } from "../types.js";
 import { CLAUDE_SETTINGS, claudeConfigDir, claudeEnvironment, loadClaudeOAuth } from "./claude-auth.js";
+import { ProviderHttpError, retryAfterMs } from "./http.js";
 
 const API = "https://api.anthropic.com";
 const WINDOWS: Record<string, { key: string; name: string; duration: number }> = {
@@ -37,7 +38,7 @@ async function claudeSession(options: ClaudeReadOptions) {
     const response = await (options.fetcher || fetch)(`${API}${endpoint}`, {
       headers: { Authorization: `Bearer ${oauth.accessToken}`, "anthropic-beta": "oauth-2025-04-20", "User-Agent": "AIQuota5h/1.1.0" }, signal, redirect: "error",
     });
-    if (!response.ok) throw new Error(`Claude 官方额度接口 HTTP ${response.status}`);
+    if (!response.ok) throw new ProviderHttpError(`Claude 官方${endpoint.endsWith("/profile") ? "账号" : "额度"}接口 HTTP ${response.status}`, response.status, retryAfterMs(response.headers));
     return response.json() as Promise<Record<string, any>>;
   };
   const profile = await get("/api/oauth/profile");
@@ -58,13 +59,20 @@ async function claudeSession(options: ClaudeReadOptions) {
 }
 
 export async function readClaude(options: ClaudeReadOptions = {}): Promise<ProviderSnapshot | ProviderReadError> {
-  const error = (category: ProviderReadError["category"], message: string): ProviderReadError => ({ provider: "claude", category, message, retryAfterMs: 300_000 });
   try {
     return (await claudeSession(options)).snapshot;
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Claude 额度读取失败";
-    return error(/HTTP 401|HTTP 403|登录|续期/.test(message) ? "unauthorized" : /HTTP 429/.test(message) ? "rate_limited" : "unavailable", message);
+    return claudeReadError(cause, message);
   }
+}
+
+function claudeReadError(cause: unknown, message: string): ProviderReadError {
+  const status = cause instanceof ProviderHttpError ? cause.status : null;
+  const category = status != null ? status === 429 ? "rate_limited" : status === 401 || status === 403 ? "unauthorized" : "unavailable"
+    : /HTTP 429/.test(message) ? "rate_limited" : /HTTP 401|HTTP 403|登录|续期/.test(message) ? "unauthorized" : "unavailable";
+  return { provider: "claude", category, message,
+    retryAfterMs: cause instanceof ProviderHttpError && cause.retryAfterMs != null ? cause.retryAfterMs : 300_000 };
 }
 
 export function mapClaudeUsage(usage: Record<string, unknown>, accountId: string, label: string, now: number, priors: PriorWindow[] = []): ProviderSnapshot {
@@ -122,8 +130,9 @@ export async function sendClaude(request: SendRequest, command: string, signal?:
     const sessionId = typeof data.session_id === "string" ? data.session_id : null;
     return { outcome: completed ? "accepted" : "unknown", sessionId, started: true, acceptance: completed ? "turn_completed" : "none",
       detail: completed ? "Claude 模型回合已完成，新窗口是否启动仍待额度核验" : "Claude 请求已启动但结果未确认，先核实，不再重发" };
-  } catch {
+  } catch (cause) {
     if (sending) return { outcome: "unknown", sessionId: null, started: true, detail: "Claude 发送阶段异常，先核实，不再重发", acceptance: "none" };
-    return notSent("Claude 官方订阅复核失败，未启动发送，请检查登录与额度读取记录");
+    const error = claudeReadError(cause, cause instanceof Error ? cause.message : "Claude 官方订阅复核失败");
+    return { ...notSent(error.message), errorCategory: error.category, retryAfterMs: error.retryAfterMs ?? 300_000 };
   }
 }

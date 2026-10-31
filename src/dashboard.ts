@@ -1,7 +1,7 @@
 import { maskEmail, maskId, redactText } from "./redact.js";
 import type { Store, TaskRow } from "./store.js";
 import { blocksActivation } from "./verify.js";
-import type { WindowFact } from "./types.js";
+import { providerRefreshMs, type WindowFact } from "./types.js";
 
 export const PROVIDER_NAMES: Record<string, string> = {
   codex: "Codex", claude: "Claude Code", antigravity: "Antigravity", grok: "Grok Build",
@@ -41,7 +41,8 @@ export function dashboard(store: Store, running: boolean, now = Date.now()) {
       guards: guards.map((task) => task.id),
       autoActivate: store.getMeta(`activate:${row.provider}:${row.pool_id}`) !== "0",
       monitoring: store.monitoring(String(row.provider)),
-      activationSupported: true,
+      activationSupported: !related.length || related.some((window) => window.activation_mode !== "auto_reset"),
+      nextRetryAt: Number(store.getMeta(`readRetryAt:${row.provider}`) || "0") || null,
       lastRead: store.db.prepare("SELECT status, detail, started_at AS startedAt, finished_at AS finishedAt FROM provider_reads WHERE provider = ? ORDER BY id DESC LIMIT 1").get(String(row.provider)) || null,
       windows: related.map((window) => ({
         id: window.window_key, name: window.window_key === "5h" ? "5 小时额度" : window.window_key === "weekly" ? "周额度" : window.kind,
@@ -57,6 +58,8 @@ export function dashboard(store: Store, running: boolean, now = Date.now()) {
     providers: Object.entries(PROVIDER_NAMES).map(([id, name]) => ({
       id, name, auth: store.getMeta(`auth:${id}`) || "unknown",
       monitoring: store.monitoring(id),
+      nextRetryAt: Number(store.getMeta(`readRetryAt:${id}`) || "0") || null,
+      refreshIntervalMs: providerRefreshMs(id),
       lastRead: store.db.prepare("SELECT status, detail, started_at AS startedAt, finished_at AS finishedAt FROM provider_reads WHERE provider = ? ORDER BY id DESC LIMIT 1").get(id) || null,
       hasSnapshot: pools.some((pool) => pool.provider === id),
     })),

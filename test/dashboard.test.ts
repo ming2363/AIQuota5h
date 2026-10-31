@@ -116,6 +116,17 @@ test("页面保存真实百分比、隐藏原始响应与旧账号，刷新请�
   assert.equal(dashboard(store, true, NOW).refreshPending, false);
 });
 
+test("页面区分官方自动重置与需要激活的窗口，限流重试时间可见", (t) => {
+  const { store, snapshot } = fixture(t);
+  store.setMeta("readRetryAt:codex", String(NOW + 600_000));
+  store.savePool({ ...snapshot.pools[0], provider: "grok", poolId: "supergrok-weekly", windows: [{ ...snapshot.pools[0].windows[0], key: "weekly", activationMode: "auto_reset", sharesRequest: false }] }, "");
+  const data = dashboard(store, true, NOW);
+  assert.equal(data.pools.find((p) => p.provider === "grok")?.activationSupported, false);
+  assert.equal(data.pools.find((p) => p.provider === "codex")?.activationSupported, true);
+  assert.equal(data.pools.find((p) => p.provider === "codex")?.nextRetryAt, NOW + 600_000);
+  assert.equal(data.providers.find((p) => p.id === "claude")?.refreshIntervalMs, 120_000);
+});
+
 test("历史分页无截断；读请求去重、超时和重启中断有真实结果", async (t) => {
   const { store, snapshot, dir } = fixture(t);
   for (let i = 0; i < 65; i++) {

@@ -30,6 +30,8 @@
 - 发送用同一已核验的 OAuth token 临时注入官方 CLI，只使用 Sonnet 别名。环境白名单不继承代理 API 凭证或模型覆盖。参数禁用设置来源、MCP、工具、技能、Chrome、会话保存；专用设置禁用 hooks、自动记忆、fast mode。发现受管配置则暂不发送。运行目录由调度器单独创建。
 - 每次发送前复核账号、费用和额度，再解析 CLI 的 `result / success / is_error=false`。回合完成后仍由额度观测确认窗口启动；空输出、超时或失败回合均视为已启动但未知，保留防重发保护。
 - 页面支持 Claude 独立读取与自动激活开关，历史记录与现有渠道共用。
+- 日常每 2 分钟读取，窗口到期仍独立复核；管理窗口打开时请求刷新，短时间内合并重复刷新。账号在调度器最终快照和发送器的同令牌会话中核对，不再因重复查询的 429 把账号判为变化。未发送时的 429 暂缓后重试，不计入模型不可用的有限重试。
+- 读取及发送前复核保留 `Retry-After`，限流等待至少 5 分钟，连续限流逐步延长至 30 分钟；等待时间写入状态库，重启不绕过，成功后清零。
 - 官方参考：[CLI 参数](https://code.claude.com/docs/en/cli-reference)、[Pro / Max 登录](https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan)、[固定周重置](https://support.claude.com/en/articles/11049741-what-is-the-max-plan)、[额外用量](https://support.claude.com/en/articles/12429409-manage-usage-credits-for-paid-claude-plans)。
 
 ## Antigravity
@@ -52,7 +54,9 @@
 - CLI：`/Users/zhangming/.local/bin/grok`，版本 1.0.46。`grok models` 显示已登录 grok.com，默认模型 `grok-4.7`。
 - 稳定账号标识：`~/.grok/auth.json` 的 `user_id`，不是 token。订阅层级 SuperGrok。
 - `grok agent stdio` 的 `x.ai/billing` 在本版本返回 Method not found。额度改读官方订阅接口 `GetGrokCreditsConfig`，令牌只在内存中使用。
-- 本次解析：使用率字段为 1，周期开始 `2026-10-16T01:47:00Z`，结束 `2026-10-23T01:47:00Z`，正好 7 天且两次含义为锚定时间。
+- 2026-11-01 核对官网当前 `GrokCreditsConfig` 协议定义：总使用率为 config 字段 1（proto3 float），统一计费标记为字段 11，当前周期为字段 8（type=2 表示周，start/end 为字段 2/3）。确认统一周额度结构后，省略的总使用率按 proto3 默认值 0 解析，表示剩余 100%。不再递归扫描其他产品／历史的浮点数来猜总使用率。缺少 config、周期错误、字段类型变化或响应损坏不会被默认成 100%。
+- 同时验证 HTTP 与 gRPC header/trailer 状态；HTTP 200 中的 gRPC 错误也算失败，保留上次成功快照。周期时间包含秒和纳秒，不丢失精度。
 - 官方 FAQ 写明周额度按 Usage 页日程重置，消息不能启动窗口。用户在 2026-10-17 对话中说可以发一条、不在乎这一条额度；该授权不能代替套餐证明。费用为 unknown、blocked 或额度耗尽时不发送。当前未读到 Auto Top Up，标记为 billing_safety_unknown，因此只监控。
 - 费用：CLI authenticate 的 `backend_billed=false`。没有读到 Auto Top Up 开关，发送安全标记为 `billing_safety_unknown`。由于无需激活，这不会触发消息。
+- 界面显示「官方定时重置，无需消息激活」，额度显示与发送费用条件分别处理；读取正常不会再因无需激活而显示自动激活异常。
 - App 关闭：Grok Build 入口是 CLI。Grok Bot 不是本工具目标，不需要保持打开。

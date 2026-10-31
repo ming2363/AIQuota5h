@@ -81,6 +81,10 @@ test("独立订阅读取核对官方套餐与额外付费，不泄漏令牌", as
   assert.ok("pools" in missing); assert.match(missing.pools[0].blockReason!, /周额度/);
   const limited = await readClaude({ configDir: dir, fetcher: (async () => new Response("", { status: 429 })) as typeof fetch });
   assert.ok("category" in limited); assert.equal(limited.category, "rate_limited");
+  const delayed = await readClaude({ configDir: dir, fetcher: (async () => new Response("", { status: 429, headers: { "retry-after": "900" } })) as typeof fetch });
+  assert.ok("category" in delayed); assert.equal(delayed.retryAfterMs, 900_000);
+  const unavailable = await readClaude({ configDir: dir, fetcher: (async () => new Response("", { status: 503 })) as typeof fetch });
+  assert.ok("category" in unavailable); assert.equal(unavailable.category, "unavailable");
 });
 
 test("Claude 独立会话剔除原有代理、API Key、SDK 和模型覆盖，隔离所有工具", () => {
@@ -178,4 +182,58 @@ test("Claude 贯穿调度器后每个旧边界最多发送一次，结果未知�
   engine.stop(); engine = new Engine(deps); engine.recover();
   engine.observe(read()); await engine.drain(); engine.stop();
   assert.equal(sends, 1);
+});
+
+test("Claude 日常轮询降频，窗口到期仍独立触发复核", async (t) => {
+  const { dir } = fixture(t);
+  const store = new Store(path.join(dir, "state.sqlite")); t.after(() => store.close());
+  let now = NOW, reads = 0;
+  const reset = now + 150_000;
+  const engine = new Engine({ store, now: () => now, workDir: dir, log: () => {},
+    read: async () => { reads++; now += 200; return mapClaudeUsage({ ...USAGE, five_hour: { utilization: 10, resets_at: new Date(reset).toISOString() } }, "official-account", "test", now); },
+    send: async () => { throw Error("must not send"); } });
+  await engine.enqueue("claude", "startup"); assert.equal(reads, 1);
+  now = NOW + 60_000; await engine.enqueue("claude", "refresh"); assert.equal(reads, 1);
+  now = NOW + 120_000; await engine.enqueue("claude", "refresh"); assert.equal(reads, 2);
+  now = reset + GRACE_MS - 1; assert.equal(engine.shouldProbeDue(), false);
+  now++; assert.equal(engine.shouldProbeDue(), true);
+  await engine.enqueue("claude", "due"); assert.equal(reads, 3);
+  engine.stop();
+});
+
+test("Claude 限流退避跨后台重启保留，成功恢复后清零", async (t) => {
+  const { dir } = fixture(t);
+  const store = new Store(path.join(dir, "state.sqlite")); t.after(() => store.close());
+  let now = NOW, reads = 0, fail = true;
+  const deps = { store, now: () => now, workDir: dir, log: () => {}, read: async () => {
+    reads++;
+    return fail ? { provider: "claude" as const, category: "rate_limited" as const, message: "429", retryAfterMs: 900_000 }
+      : mapClaudeUsage({ ...USAGE, five_hour: { utilization: 10, resets_at: new Date(now + 3600_000).toISOString() } }, "official-account", "test", now);
+  }, send: async () => { throw Error("must not send"); } };
+  let engine = new Engine(deps);
+  await engine.enqueue("claude", "startup"); assert.equal(reads, 1);
+  assert.equal(Number(store.getMeta("readRetryAt:claude")), now + 900_000);
+  engine.stop(); engine = new Engine(deps); engine.recover();
+  now += 300_000;
+  await engine.enqueue("claude", "startup"); await engine.enqueue("claude", "manual"); assert.equal(reads, 1);
+  now += 600_000; fail = false;
+  await engine.enqueue("claude", "refresh"); assert.equal(reads, 2);
+  assert.equal(store.getMeta("readRetryAt:claude"), "0"); assert.equal(store.getMeta("fail:claude"), "0");
+  engine.stop();
+});
+
+test("Claude 发送前额度核对限流会暂缓，不误判账号变更或消耗模型重试次数", async (t) => {
+  const { dir, request } = fixture(t);
+  const limited = await sendClaude(request, "/not-invoked", undefined, { configDir: dir, fetcher: (async () => new Response("", { status: 429, headers: { "retry-after": "600" } })) as typeof fetch });
+  assert.equal(limited.started, false); assert.equal(limited.errorCategory, "rate_limited"); assert.equal(limited.retryAfterMs, 600_000);
+  const store = new Store(path.join(dir, "state.sqlite")); t.after(() => store.close());
+  const prior = { accountId: "official-account", poolId: "claude-subscription", key: "5h", state: "active" as const, resetAt: NOW - GRACE_MS, preservedBoundary: null, windowId: "old", observedAt: NOW - GRACE_MS - 60_000 };
+  const snap = mapClaudeUsage(USAGE, "official-account", "test", NOW, [prior]); snap.pools[0].billingSafety = "subscription_only";
+  const engine = new Engine({ store, now: () => NOW, workDir: dir, log: () => {}, read: async () => snap, confirmAccount: async () => true, send: async () => limited });
+  engine.observe(snap); await engine.drain();
+  const task = store.recentTasks()[0];
+  assert.equal(task.status, "deferred"); assert.equal(task.error_category, "rate_limited"); assert.equal(task.message_result, "not_sent");
+  assert.equal(task.retry_after, NOW + 600_000);
+  assert.equal(store.db.prepare("SELECT status FROM provider_reads ORDER BY id DESC LIMIT 1").get()?.status, "rate_limited");
+  engine.stop();
 });

@@ -1,5 +1,7 @@
 export const GRACE_MS = 65_000;
 export const REFRESH_MS = 60_000;
+export const CLAUDE_REFRESH_MS = 120_000;
+export function providerRefreshMs(provider: string): number { return provider === "claude" ? CLAUDE_REFRESH_MS : REFRESH_MS; }
 export const DUE_SLACK_MS = 5_000;
 export const WATCHDOG_MS = 10_000;
 export const VERIFY_DELAYS_MS = [5_000, 15_000, 30_000] as const;
@@ -85,6 +87,8 @@ export interface SendResult {
   started: boolean;
   acceptance?: "turn_completed" | "thread_only" | "none";
   usageTokens?: number | null;
+  errorCategory?: ProviderReadError["category"];
+  retryAfterMs?: number;
 }
 
 export interface Decision {

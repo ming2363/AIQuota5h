@@ -15,6 +15,14 @@ final class AppModel: ObservableObject {
     @Published var loginMessage = ""
     var onUpdate: (() -> Void)?
 
+    func refreshOnOpen() async {
+        guard !busy else { return }
+        await reload()
+        guard dashboard?.running == true, dashboard?.refreshPending != true else { return }
+        do { _ = try await Backend.run(["refresh"]); await reload() }
+        catch { self.error = error.localizedDescription }
+    }
+
     func reload() async {
         guard !busy else { return }
         busy = true

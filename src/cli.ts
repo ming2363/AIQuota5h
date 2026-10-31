@@ -82,8 +82,8 @@ async function daemon(): Promise<number> {
         if (pool.provider === "codex") return readCodexAccountId().accountId === pool.accountId;
         if (pool.provider === "grok") return readGrokIdentity().userId === pool.accountId;
         if (pool.provider === "claude") {
-          const current = await readClaude();
-          return "accountId" in current && current.accountId === pool.accountId;
+          // Engine's final snapshot and sendClaude both verify the actual account; avoid three extra OAuth usage reads.
+          return true;
         }
         const agy = loadConfig().cli.agy;
         if (!agy) return false;

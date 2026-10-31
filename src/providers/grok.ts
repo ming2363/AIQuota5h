@@ -4,6 +4,7 @@ import path from "node:path";
 import { isShuttingDown, runCommand, safeEnv } from "../proc.js";
 import { redactJson } from "../redact.js";
 import { classifyWindow } from "../decision.js";
+import { ProviderHttpError, retryAfterMs } from "./http.js";
 import type { PoolFact, ProviderReadError, ProviderSnapshot, SendRequest, SendResult, WindowFact } from "../types.js";
 
 const BILLING_URL = "https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig";
@@ -30,9 +31,9 @@ export async function readGrok(now = Date.now(), signal?: AbortSignal): Promise<
   } catch (error) {
     return { provider: "grok", category: "unauthorized", message: error instanceof Error ? error.message : String(error), retryAfterMs: null };
   }
-  const token = readToken();
-  if (!token) return { provider: "grok", category: "unauthorized", message: "Grok 登录态缺失", retryAfterMs: null };
   try {
+    const token = readToken();
+    if (!token) return { provider: "grok", category: "unauthorized", message: "Grok 登录态缺失", retryAfterMs: null };
     const parsed = await fetchBilling(token, now, signal, fetch);
     const window = classifyWindow({
       key: "weekly",
@@ -94,8 +95,8 @@ export async function readGrok(now = Date.now(), signal?: AbortSignal): Promise<
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const category = /401|403|credential/i.test(message) ? "unauthorized" : "unavailable";
-    return { provider: "grok", category, message, retryAfterMs: category === "unauthorized" ? null : 30_000 };
+    const category = error instanceof ProviderHttpError && error.status === 429 ? "rate_limited" : /401|403|credential/i.test(message) ? "unauthorized" : "unavailable";
+    return { provider: "grok", category, message, retryAfterMs: error instanceof ProviderHttpError && error.retryAfterMs != null ? error.retryAfterMs : category === "rate_limited" ? 300_000 : category === "unauthorized" ? null : 30_000 };
   }
 }
 
@@ -177,8 +178,8 @@ export async function fetchBilling(
       },
       body: Buffer.from([0, 0, 0, 0, 0]),
     });
-    if (response.status === 401 || response.status === 403) throw new Error("Grok billing unauthorized");
-    if (!response.ok) throw new Error(`Grok billing HTTP ${response.status}`);
+    if (!response.ok) throw new ProviderHttpError(`Grok billing HTTP ${response.status}`, response.status, retryAfterMs(response.headers));
+    checkGrpcStatus(response.headers.get("grpc-status"));
     const bytes = await readBody(response, controller.signal);
     return parseCredits(bytes, now);
   } finally {
@@ -193,20 +194,17 @@ async function readBody(response: Response, signal: AbortSignal): Promise<Buffer
   if (!body) return Buffer.from(await response.arrayBuffer());
   const reader = body.getReader();
   const chunks: Buffer[] = [];
+  let size = 0;
   const onAbort = () => {
     void reader.cancel().catch(() => undefined);
   };
   signal.addEventListener("abort", onAbort, { once: true });
   try {
     while (!signal.aborted) {
-      const next = await Promise.race([
-        reader.read(),
-        new Promise<never>((_resolve, reject) => {
-          if (signal.aborted) reject(new Error("读取已取消"));
-          else signal.addEventListener("abort", () => reject(new Error("读取已取消")), { once: true });
-        }),
-      ]);
+      const next = await reader.read();
       if (next.done) break;
+      size += next.value.length;
+      if (size > 1024 * 1024) { await reader.cancel(); throw new Error("Grok 额度响应超过大小限制"); }
       chunks.push(Buffer.from(next.value));
     }
     if (signal.aborted) throw new Error("读取已取消");
@@ -216,78 +214,115 @@ async function readBody(response: Response, signal: AbortSignal): Promise<Buffer
   }
 }
 
-export function parseCredits(bytes: Buffer, now: number): { usedPercent: number | null; periodStart: number | null; periodEnd: number | null } {
-  const payload = grpcPayload(bytes);
-  const scan = scanProto(payload);
-  const percent = scan.floats.find((field) => field.path.endsWith(".1") && field.value >= 0 && field.value <= 100)?.value ?? null;
-  const start = scan.varints.find((field) => field.path === "1.4.1")?.value;
-  const end = scan.varints.find((field) => field.path === "1.5.1")?.value;
-  return {
-    usedPercent: percent,
-    periodStart: start ? start * 1000 : null,
-    periodEnd: end && end * 1000 > now - 86_400_000 ? end * 1000 : end ? end * 1000 : null,
+// Field numbers and proto3 defaults verified against grok.com's GrokCreditsConfig descriptor.
+export function parseCredits(bytes: Buffer, _now: number): { usedPercent: number | null; periodStart: number | null; periodEnd: number | null } {
+  const response = protoFields(grpcPayload(bytes));
+  const config = messageField(response, 1);
+  if (!config) throw new Error("Grok 额度响应缺少 config，未覆盖历史额度");
+  const fields = protoFields(config);
+  const current = messageField(fields, 8);
+  if (!current) throw new Error("Grok 额度响应缺少当前周期，未覆盖历史额度");
+  const period = protoFields(current);
+  if (numberField(period, 1, 0) !== 2) throw new Error("Grok 返回的不是已支持的周额度周期");
+  const timestamp = (field: number): number => {
+    const message = messageField(period, field);
+    if (!message) throw new Error("Grok 周期时间缺失");
+    const values = protoFields(message);
+    const seconds = numberField(values, 1, 0);
+    const nanos = numberField(values, 2, 0) ?? 0;
+    if (seconds == null || seconds <= 0 || nanos < 0 || nanos >= 1e9) throw new Error("Grok 周期时间无效");
+    return seconds * 1000 + Math.floor(nanos / 1e6);
   };
+  const periodStart = timestamp(2), periodEnd = timestamp(3);
+  if (periodEnd <= periodStart || Math.abs(periodEnd - periodStart - 7 * 86400_000) > 1000) throw new Error("Grok 周期长度异常，未覆盖历史额度");
+  // A confirmed unified weekly config uses a non-optional proto3 float: omitted means zero.
+  // Never default a missing config, a legacy account or an unrelated product percentage to zero.
+  const unified = numberField(fields, 11, 0) === 1;
+  const value = numberField(fields, 1, 5);
+  const percent = value ?? (unified ? 0 : null);
+  const usedPercent = percent != null && Number.isFinite(percent) && percent >= 0 && percent <= 100 ? percent : null;
+  return { usedPercent, periodStart, periodEnd };
+}
+
+function checkGrpcStatus(status: string | null): void {
+  if (status == null || status === "0") return;
+  const http = status === "8" ? 429 : status === "16" ? 401 : status === "7" ? 403 : 502;
+  throw new ProviderHttpError(`Grok gRPC status ${status} (HTTP ${http})`, http);
 }
 
 function grpcPayload(bytes: Buffer): Buffer {
   let offset = 0;
-  const frames: Buffer[] = [];
-  while (offset + 5 <= bytes.length) {
+  let payload: Buffer | null = null;
+  while (offset < bytes.length) {
+    if (offset + 5 > bytes.length) throw new Error("Grok gRPC 帧头不完整");
     const flags = bytes[offset];
     const length = bytes.readUInt32BE(offset + 1);
-    const start = offset + 5;
-    const end = start + length;
-    if (end > bytes.length) break;
-    if ((flags & 0x80) === 0) frames.push(bytes.subarray(start, end));
+    const start = offset + 5, end = start + length;
+    if (end > bytes.length) throw new Error("Grok gRPC 响应被截断");
+    if (flags === 0x80) {
+      const trailers = bytes.subarray(start, end).toString("utf8");
+      checkGrpcStatus(trailers.match(/(?:^|\r?\n)grpc-status:\s*(\d+)/i)?.[1] ?? null);
+    } else if (flags === 0 && payload == null) payload = bytes.subarray(start, end);
+    else throw new Error("Grok gRPC 帧格式不支持");
     offset = end;
   }
-  return frames[0] || Buffer.alloc(0);
+  if (!payload) throw new Error("Grok gRPC 响应缺少数据");
+  return payload;
 }
 
-function scanProto(bytes: Buffer, pathPrefix: number[] = [], depth = 0): { floats: Array<{ path: string; value: number }>; varints: Array<{ path: string; value: number }> } {
-  const out = { floats: [] as Array<{ path: string; value: number }>, varints: [] as Array<{ path: string; value: number }> };
+type ProtoField = { wire: number; value: number | Buffer };
+function protoFields(bytes: Buffer): Map<number, ProtoField[]> {
+  const fields = new Map<number, ProtoField[]>();
   let offset = 0;
-  while (offset < bytes.length && depth < 8) {
+  while (offset < bytes.length) {
     const key = readVarint(bytes, offset);
-    if (!key) break;
+    if (!key) throw new Error("Grok protobuf 标签不完整");
     offset = key.offset;
-    const field = Math.floor(key.value / 8);
-    const wire = key.value % 8;
-    const next = pathPrefix.concat(field);
-    const name = next.join(".");
+    const field = Math.floor(key.value / 8), wire = key.value % 8;
+    if (!field || field > 536870911) throw new Error("Grok protobuf 字段无效");
+    let value: number | Buffer;
     if (wire === 0) {
-      const value = readVarint(bytes, offset);
-      if (!value) break;
-      out.varints.push({ path: name, value: value.value });
-      offset = value.offset;
-    } else if (wire === 1) offset += 8;
-    else if (wire === 2) {
+      const item = readVarint(bytes, offset);
+      if (!item) throw new Error("Grok protobuf 整数字段不完整");
+      value = item.value; offset = item.offset;
+    } else if (wire === 1 || wire === 5) {
+      const length = wire === 1 ? 8 : 4;
+      if (offset + length > bytes.length) throw new Error("Grok protobuf 数值字段不完整");
+      value = wire === 1 ? bytes.readDoubleLE(offset) : bytes.readFloatLE(offset); offset += length;
+    } else if (wire === 2) {
       const length = readVarint(bytes, offset);
-      if (!length) break;
+      if (!length || length.value > bytes.length - length.offset) throw new Error("Grok protobuf 消息不完整");
       offset = length.offset;
-      const end = offset + length.value;
-      if (end > bytes.length) break;
-      const nested = scanProto(bytes.subarray(offset, end), next, depth + 1);
-      out.floats.push(...nested.floats);
-      out.varints.push(...nested.varints);
-      offset = end;
-    } else if (wire === 5) {
-      out.floats.push({ path: name, value: bytes.readFloatLE(offset) });
-      offset += 4;
-    } else break;
+      value = bytes.subarray(offset, offset + length.value); offset += length.value;
+    } else throw new Error("Grok protobuf 编码不支持");
+    const list = fields.get(field) || [];
+    list.push({ wire, value }); fields.set(field, list);
   }
-  return out;
+  return fields;
 }
 
+function scalarField(fields: Map<number, ProtoField[]>, key: number, wire: number): ProtoField | undefined {
+  const list = fields.get(key);
+  if (!list) return undefined;
+  if (list.length !== 1 || list[0].wire !== wire) throw new Error("Grok 额度协议字段类型已变化");
+  return list[0];
+}
+function numberField(fields: Map<number, ProtoField[]>, key: number, wire: number): number | null {
+  return scalarField(fields, key, wire)?.value as number ?? null;
+}
+function messageField(fields: Map<number, ProtoField[]>, key: number): Buffer | undefined {
+  return scalarField(fields, key, 2)?.value as Buffer | undefined;
+}
 function readVarint(bytes: Buffer, start: number): { value: number; offset: number } | null {
-  let value = 0n;
-  let shift = 0n;
-  let offset = start;
+  let value = 0n, shift = 0n, offset = start;
   while (offset < bytes.length && shift <= 63n) {
     const byte = bytes[offset];
     value |= BigInt(byte & 0x7f) << shift;
     offset += 1;
-    if ((byte & 0x80) === 0) return { value: Number(value), offset };
+    if ((byte & 0x80) === 0) {
+      if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Grok protobuf 整数超出安全范围");
+      return { value: Number(value), offset };
+    }
     shift += 7n;
   }
   return null;

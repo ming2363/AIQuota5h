@@ -184,7 +184,7 @@ struct DashboardView: View {
                         }
                     }
                 }
-                Text("每分钟自动读取。关闭渠道后不再开始新的读取或激活；已发出的请求仍保留记录。")
+                Text("自动读取额度，Claude 日常每 2 分钟，其余渠道每分钟；到期单独复核。接口限流时延后重试，关闭渠道后不再开始新的读取或激活。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("到期自动激活") {
@@ -231,13 +231,22 @@ struct PoolCard: View {
                 if pool.stale { Label("数据已过期", systemImage: "clock.badge.exclamationmark").font(.caption).foregroundStyle(.orange) }
             }
             Text("更新于 \(dateText(pool.observedAt))").font(.caption2).foregroundStyle(.secondary)
-            Toggle("到期自动激活", isOn: Binding(get: { pool.autoActivate }, set: { enabled in
-                model.perform(["control", "activate", pool.provider, enabled ? "on" : "off", pool.poolId])
-            })).toggleStyle(.switch).controlSize(.small)
-                .disabled(model.busy || !pool.activationSupported || !pool.monitoring)
+            if pool.activationSupported {
+                Toggle("到期自动激活", isOn: Binding(get: { pool.autoActivate }, set: { enabled in
+                    model.perform(["control", "activate", pool.provider, enabled ? "on" : "off", pool.poolId])
+                })).toggleStyle(.switch).controlSize(.small)
+                    .disabled(model.busy || !pool.monitoring)
+            } else {
+                Label("官方定时重置，无需消息激活", systemImage: "arrow.clockwise.circle").font(.caption).foregroundStyle(.secondary)
+            }
             if !pool.monitoring { Text("该渠道自动读取已关闭；以下为历史快照。自动激活同时停止。").font(.caption).foregroundStyle(.orange) }
             if let read = pool.lastRead, read.status != "ok" && read.status != "running" {
-                Label("最近读取失败：\(read.detail)", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 5) {
+                    Label(read.status == "rate_limited" ? "官方接口暂时限流，以下为上次成功读取的额度" : "最近读取失败：\(read.detail)", systemImage: "exclamationmark.circle")
+                    if let retry = pool.nextRetryAt, retry > Date().timeIntervalSince1970 * 1000 {
+                        Text("预计 \(dateText(retry)) 自动重试")
+                    }
+                }.font(.caption).foregroundStyle(.orange)
             }
             ForEach(pool.windows) { window in
                 VStack(alignment: .leading, spacing: 8) {
@@ -262,10 +271,10 @@ struct PoolCard: View {
             if !pool.guards.isEmpty {
                 Label("历史请求待核验，同周期不会重发", systemImage: "hourglass").font(.caption).foregroundStyle(.orange)
             }
-            if let reason = pool.blockReason {
+            if let reason = pool.blockReason, pool.activationSupported {
                 Label("自动激活暂不可用：\(blockReasonLabel(reason))", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
-            if pool.autoActivate && pool.billingSafety != "subscription_only" && pool.blockReason == nil {
+            if pool.activationSupported && pool.autoActivate && pool.billingSafety != "subscription_only" && pool.blockReason == nil {
                 Label("费用条件未确认，当前仅监控额度", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
             }
             DisclosureGroup("额度与模型详情") {

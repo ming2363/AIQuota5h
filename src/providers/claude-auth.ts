@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { runtimePaths } from "../paths.js";
 import { runCommand } from "../proc.js";
+import { ProviderHttpError, retryAfterMs } from "./http.js";
 
 export interface ClaudeOAuth {
   accessToken: string;
@@ -68,7 +69,7 @@ export async function loadClaudeOAuth(dir: string, signal?: AbortSignal, fetcher
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ grant_type: "refresh_token", refresh_token: oauth.refreshToken, client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e", scope: oauth.scopes?.join(" ") }),
     });
-    if (!response.ok) throw new Error(`Claude 订阅续期失败 HTTP ${response.status}，请重新运行 aiquota5h claude-login`);
+    if (!response.ok) throw new ProviderHttpError(`Claude 订阅续期失败 HTTP ${response.status}${response.status === 401 || response.status === 403 ? "，请重新运行 aiquota5h claude-login" : "，稍后自动重试"}`, response.status, retryAfterMs(response.headers));
     const data = await response.json() as Record<string, unknown>;
     if (typeof data.access_token !== "string" || !data.access_token || typeof data.expires_in !== "number" || !Number.isFinite(data.expires_in) || data.expires_in <= 0) {
       throw new Error("Claude 订阅续期响应无效，未覆盖原登录态");

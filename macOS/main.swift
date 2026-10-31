@@ -88,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        Task { await model.refreshOnOpen() }
     }
 
     func windowWillClose(_ notification: Notification) { NSApp.setActivationPolicy(.accessory) }

@@ -17,6 +17,8 @@ struct QuotaProvider: Decodable, Identifiable {
     let hasSnapshot: Bool
     let monitoring: Bool
     let lastRead: ReadSummary?
+    let nextRetryAt: Double?
+    let refreshIntervalMs: Double?
 }
 
 struct ReadSummary: Decodable {
@@ -43,6 +45,7 @@ struct QuotaPool: Decodable, Identifiable {
     let autoActivate: Bool
     let activationSupported: Bool
     let lastRead: ReadSummary?
+    let nextRetryAt: Double?
     let windows: [QuotaWindow]
 }
 

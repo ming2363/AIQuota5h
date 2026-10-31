@@ -4,7 +4,7 @@ import { SAMPLE_MIN_MS, decide } from "./decision.js";
 import { VERIFY_STALL_MS, blocksActivation, confirmsTask, laterPeriodProven, windowDurationMs } from "./verify.js";
 import type { Store, TaskRow } from "./store.js";
 import { redactText } from "./redact.js";
-import { SHORT_PROMPT, type PoolFact, type ProviderId, type ProviderReadError, type ProviderSnapshot, type SendResult, type WindowFact } from "./types.js";
+import { GRACE_MS, providerRefreshMs, SHORT_PROMPT, type PoolFact, type ProviderId, type ProviderReadError, type ProviderSnapshot, type SendResult, type WindowFact } from "./types.js";
 
 export interface EngineDeps {
   store: Store;
@@ -73,7 +73,8 @@ export class Engine {
     const windows = this.deps.store.allWindows();
     return windows.some((window) => {
       if (!this.deps.store.activating(window.provider, window.pool_id)) return false;
-      if (window.state !== "idle" || window.due_at == null || window.due_at > now) return false;
+      const expiredActive = window.activation_mode === "usage_started" && window.state === "active" && window.reset_at != null && window.reset_at + GRACE_MS <= now;
+      if (!expiredActive && (window.state !== "idle" || window.due_at == null || window.due_at > now)) return false;
       const key = `${window.provider}:${window.account_id}:${window.pool_id}`;
       if ((this.dueSuppressed.get(key) ?? 0) > now) return false;
       if (tasks.some((task) => {
@@ -84,14 +85,17 @@ export class Engine {
           oldEndedAt: observed.old_ended_at, resetAt: observed.reset_at,
         } : undefined, now);
       })) return false;
-      return now >= (this.nextAllowed.get(window.provider as ProviderId) ?? 0);
+      return now >= this.retryAt(window.provider as ProviderId);
     });
   }
 
   private async runProvider(provider: ProviderId, reason: string): Promise<void> {
     if (!this.deps.store.monitoring(provider)) return;
     const now = this.deps.now();
-    if (now < (this.nextAllowed.get(provider) ?? 0)) return;
+    if (now < this.retryAt(provider)) return;
+    const lastRead = Number(this.deps.store.getMeta(`lastReadOk:${provider}`) || "0");
+    if ((reason === "refresh" || reason === "startup") && provider === "claude" && lastRead > 0 && now >= lastRead && now - lastRead < providerRefreshMs(provider)) return;
+    if (reason === "manual" && provider === "claude" && lastRead > 0 && now - lastRead < 30_000) return;
     if (this.deps.store.paused() && reason !== "startup" && reason !== "manual") {
       this.deps.log("info", `已暂停，跳过发送 (${reason})`, provider);
       return;
@@ -99,12 +103,10 @@ export class Engine {
     const result = await this.readShared(provider, reason);
     if (this.stopped) return;
     if (isError(result)) {
-      this.noteFailure(provider, result);
       this.deps.store.addEvent("error", `${provider} 读取失败：${result.message}`, provider, this.deps.now());
       this.deps.log("error", result.message, provider);
       return;
     }
-    this.nextAllowed.set(provider, 0);
     this.deps.store.setMeta(`auth:${provider}`, "ok");
     this.observe(result);
   }
@@ -212,7 +214,6 @@ export class Engine {
     }
     const fresh = await this.readShared(pool.provider);
     if (!fresh || isError(fresh)) {
-      if (fresh && isError(fresh)) this.noteFailure(pool.provider, fresh);
       cancel("deferred", fresh && isError(fresh) ? fresh.category === "rate_limited" ? "rate_limited" : "refresh_failed" : "refresh_failed", "发送前复核失败，请求未发出", fresh && isError(fresh) ? fresh.retryAfterMs ?? 30_000 : 30_000);
       return;
     }
@@ -249,6 +250,7 @@ export class Engine {
     fs.mkdirSync(work, { recursive: true });
     if (this.haltUnsent(ids)) return;
     this.deps.store.setPhase(ids, "spawning", this.deps.now());
+    const sendStartedAt = this.deps.now();
     let result: SendResult;
     try {
       result = await this.deps.send(freshPool, work, this.stopController.signal);
@@ -259,7 +261,12 @@ export class Engine {
     }
     const at = this.deps.now();
     if (result.outcome === "not_sent" && result.started !== true) {
-      cancel("deferred", this.stopped ? "shutdown" : "model_unavailable", result.detail || "请求未发出", this.stopped ? 0 : 60_000);
+      if (result.errorCategory) {
+        this.noteFailure(pool.provider, { provider: pool.provider, category: result.errorCategory, message: result.detail, retryAfterMs: result.retryAfterMs ?? null });
+        const readId = this.deps.store.startRead(pool.provider, "verification", sendStartedAt);
+        this.deps.store.finishRead(readId, result.errorCategory, redactText(result.detail), at);
+      }
+      cancel("deferred", this.stopped ? "shutdown" : result.errorCategory === "rate_limited" ? "rate_limited" : result.errorCategory ? "refresh_failed" : "model_unavailable", result.detail || "请求未发出", this.stopped ? 0 : Math.max(60_000, this.retryAt(pool.provider) - at));
       return;
     }
     this.deps.store.setPhase(ids, "spawned", at);
@@ -414,7 +421,7 @@ export class Engine {
 
   private readShared(provider: ProviderId, reason = "verification"): Promise<ProviderSnapshot | ProviderReadError> {
     const now = this.deps.now();
-    const allowedAt = this.nextAllowed.get(provider) ?? 0;
+    const allowedAt = this.retryAt(provider);
     if (now < allowedAt) {
       return Promise.resolve({
         provider,
@@ -437,6 +444,13 @@ export class Engine {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        if (isError(value)) this.noteFailure(provider, value);
+        else {
+          this.nextAllowed.set(provider, 0);
+          this.deps.store.setMeta(`readRetryAt:${provider}`, "0");
+          this.deps.store.setMeta(`fail:${provider}`, "0");
+          this.deps.store.setMeta(`lastReadOk:${provider}`, String(now));
+        }
         this.deps.store.finishRead(readId, isError(value) ? value.category : "ok", isError(value) ? redactText(value.message) : `读取成功，${value.pools.length} 个额度池`, this.deps.now());
         resolve(value);
       };
@@ -516,9 +530,16 @@ export class Engine {
     const current = this.nextAllowed.get(provider) ?? 0;
     const count = Number(this.deps.store.getMeta(`fail:${provider}`) || "0") + 1;
     this.deps.store.setMeta(`fail:${provider}`, String(count));
-    const delay = error.retryAfterMs ?? (error.category === "unauthorized" ? 300_000 : BACKOFF[Math.min(count - 1, BACKOFF.length - 1)]);
-    this.nextAllowed.set(provider, Math.max(current, this.deps.now() + delay));
+    const fallback = error.category === "rate_limited" ? Math.min(1800_000, 300_000 * 2 ** Math.min(count - 1, 3)) : error.category === "unauthorized" ? 300_000 : BACKOFF[Math.min(count - 1, BACKOFF.length - 1)];
+    const delay = error.category === "rate_limited" ? Math.max(error.retryAfterMs ?? 0, fallback) : error.retryAfterMs ?? fallback;
+    const retryAt = Math.max(current, this.deps.now() + delay);
+    this.nextAllowed.set(provider, retryAt);
+    this.deps.store.setMeta(`readRetryAt:${provider}`, String(retryAt));
     if (error.category === "unauthorized") this.deps.store.setMeta(`auth:${provider}`, "unauthorized");
+  }
+
+  private retryAt(provider: ProviderId): number {
+    return Math.max(this.nextAllowed.get(provider) ?? 0, Number(this.deps.store.getMeta(`readRetryAt:${provider}`) || "0"));
   }
 }
 
