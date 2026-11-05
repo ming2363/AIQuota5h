@@ -263,7 +263,7 @@ struct PoolCard: View {
                         Text(window.state == "active" ? "窗口进行中" : window.state == "idle" ? "等待新窗口启动" : "窗口状态待确认")
                         Spacer()
                         TimelineView(.periodic(from: .now, by: 1)) { context in
-                            Text(window.resetAt.map { countdown($0, now: context.date) } ?? "重置时间未知")
+                            Text(window.resetAt.map { countdown($0, now: context.date) } ?? (window.state == "idle" ? "未开始计时" : "重置时间未知"))
                         }
                     }.font(.caption).foregroundStyle(.secondary)
                 }
@@ -283,7 +283,7 @@ struct PoolCard: View {
                     Text("费用状态：\(pool.billingSafety == "subscription_only" ? "已证明仅使用订阅额度" : "未证明仅使用订阅额度，禁止自动发送")")
                     Text("模型：\(pool.models.joined(separator: "、"))").textSelection(.enabled)
                     ForEach(pool.windows) { window in
-                        Text("\(window.name)重置时间：\(window.resetAt.map(dateText) ?? "未知")")
+                        Text("\(window.name)重置时间：\(window.resetAt.map(dateText) ?? (window.state == "idle" ? "未开始计时" : "未知"))")
                     }
                 }.font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 7)
             }.font(.caption)

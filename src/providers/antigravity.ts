@@ -58,6 +58,106 @@ export function assessAgyIsolation(help: string): { ok: boolean; reason: string;
   return { ok: true, reason: "", extraArgs: [plugins!, mcp!, hooks!] };
 }
 
+/**
+ * agy 没有调用级隔离参数时，允许发送的插件白名单：插件名 → 允许它自带的 MCP 服务器。
+ * 只收录官方市场里只含技能或只读文档 MCP 的插件；新装的插件不在名单内，会自动拦截发送。
+ */
+export const AGY_ALLOWED_PLUGINS: Record<string, string[]> = {
+  "android-cli-plugin": [],
+  "gemini-api": ["gemini-api-docs"],
+  "google-antigravity-sdk": [],
+};
+const AGY_OFFICIAL_SOURCE = "antigravity-plugins-official";
+const AGY_PLUGIN_KNOWN_KEYS = new Set(["name", "enabled", "version", "source", "path", "skills", "mcpServers"]);
+
+interface AgyPluginEntry {
+  name?: string;
+  enabled?: boolean;
+  source?: string;
+  path?: string;
+  mcpServers?: string[];
+  [key: string]: unknown;
+}
+
+/** 根据实际环境判断能否安全发送：不能有钩子、不能有用户自配 MCP、启用的插件都必须在白名单内。 */
+export function assessAgyEnvironment(input: { pluginsJson: string; mcpText: string; existingHookFiles: string[] }): { ok: boolean; reason: string } {
+  let plugins: AgyPluginEntry[];
+  try {
+    const parsed = JSON.parse(input.pluginsJson) as unknown;
+    if (!Array.isArray(parsed)) return { ok: false, reason: "agy plugin list 输出无法识别" };
+    plugins = parsed as AgyPluginEntry[];
+  } catch {
+    return { ok: false, reason: "agy plugin list 输出无法识别" };
+  }
+  if (!/No MCP servers configured/i.test(input.mcpText)) {
+    return { ok: false, reason: "agy 配置了自定义 MCP 服务器" };
+  }
+  if (input.existingHookFiles.length > 0) {
+    return { ok: false, reason: `存在 agy 钩子配置：${input.existingHookFiles.join("、")}` };
+  }
+  for (const plugin of plugins) {
+    if (plugin.enabled === false) continue;
+    const name = String(plugin.name || "");
+    const allowedMcp = AGY_ALLOWED_PLUGINS[name];
+    if (!allowedMcp) return { ok: false, reason: `启用了白名单以外的 agy 插件：${name || "未知"}` };
+    if (plugin.source !== AGY_OFFICIAL_SOURCE) return { ok: false, reason: `agy 插件 ${name} 不是官方市场来源` };
+    const extra = Object.keys(plugin).filter((key) => !AGY_PLUGIN_KNOWN_KEYS.has(key));
+    if (extra.length > 0) return { ok: false, reason: `agy 插件 ${name} 含有未核对的组件：${extra.join("、")}` };
+    const mcp = Array.isArray(plugin.mcpServers) ? plugin.mcpServers : [];
+    const unexpected = mcp.filter((server) => !allowedMcp.includes(server));
+    if (unexpected.length > 0) return { ok: false, reason: `agy 插件 ${name} 含有未核对的 MCP 服务器：${unexpected.join("、")}` };
+  }
+  return { ok: true, reason: "" };
+}
+
+/** 可能存在钩子配置的位置：每个已启用插件目录下的 hooks.json，以及用户级配置目录。 */
+function agyHookFiles(pluginsJson: string): string[] {
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, ".gemini", "config", "hooks.json"),
+    path.join(home, ".gemini", "antigravity-cli", "hooks.json"),
+  ];
+  try {
+    const parsed = JSON.parse(pluginsJson) as AgyPluginEntry[];
+    for (const plugin of Array.isArray(parsed) ? parsed : []) {
+      if (plugin.enabled === false || !plugin.path) continue;
+      candidates.push(path.join(plugin.path, "hooks.json"), path.join(plugin.path, "hooks", "hooks.json"));
+    }
+  } catch {
+    // 插件列表无法解析时由 assessAgyEnvironment 拦截
+  }
+  return candidates.filter((file) => fs.existsSync(file));
+}
+
+async function checkAgyEnvironment(agy: string, signal?: AbortSignal): Promise<{ ok: boolean; reason: string }> {
+  const plugins = await runCommand({ command: agy, args: ["plugin", "list", "--json"], timeoutMs: 20_000, env: safeEnv(), signal });
+  const mcp = await runCommand({ command: agy, args: ["mcp", "list"], timeoutMs: 20_000, env: safeEnv(), signal });
+  return assessAgyEnvironment({
+    pluginsJson: plugins.stdout,
+    mcpText: commandText(mcp),
+    existingHookFiles: agyHookFiles(plugins.stdout),
+  });
+}
+
+/**
+ * 发送隔离：优先使用调用级隔离参数；agy 没有这些参数时，改为核对实际环境。
+ * fresh=false（读取额度时）复用 10 分钟内的环境检查结果；发送前总是重新检查。
+ */
+let agyEnvCache: { at: number; result: { ok: boolean; reason: string } } | null = null;
+export async function resolveAgyIsolation(agy: string | null | undefined, help: string, options: { fresh: boolean; signal?: AbortSignal }): Promise<{ ok: boolean; reason: string; extraArgs: string[] }> {
+  const flags = assessAgyIsolation(help);
+  if (flags.ok || !agy) return flags;
+  const now = Date.now();
+  let env = !options.fresh && agyEnvCache && now - agyEnvCache.at < 10 * 60_000 ? agyEnvCache.result : null;
+  if (!env) {
+    env = await checkAgyEnvironment(agy, options.signal);
+    if (!options.signal?.aborted) agyEnvCache = { at: now, result: env };
+  }
+  return env.ok
+    ? { ok: true, reason: "", extraArgs: [] }
+    : { ok: false, reason: `${flags.reason}；${env.reason}`, extraArgs: [] };
+}
+
 export function parseAgyUsageTable(text: string): Group[] {
   const groups = new Map<string, Bucket[]>();
   for (const line of text.split(/\n/)) {
@@ -147,7 +247,7 @@ export async function readAntigravity(options: {
       priors: options.priors || [],
       credits: cli.credits,
       consistent,
-      isolation: assessAgyIsolation(helpText),
+      isolation: options.helpText != null ? assessAgyIsolation(helpText) : await resolveAgyIsolation(options.agy, helpText, { fresh: false, signal: options.signal }),
       modelMap: selectAgyModels(modelsText),
     });
     return {
@@ -206,9 +306,16 @@ export function mapGroups(input: {
         : exact && /you have used/i.test(bucket.description || "")
           ? "anchored"
           : resetAt ? "unknown" : "absent";
+      // 精确满额、无使用文字、重置时间固定：2026-11-05 实测 claude-gpt 周额度重置后即给出“旧重置 + 7 天”，
+      // 发送请求后重置时间不变，说明周额度按固定日程重置，不需要也无法靠请求启动
+      const exactZeroAnchored = exact
+        && clock === "anchored"
+        && typeof bucket.remainingFraction === "number"
+        && bucket.remainingFraction >= 0.999999
+        && !/you have used/i.test(bucket.description || "");
       const hint = key === "5h"
         ? "usage_started" as const
-        : /fully refresh|refresh in/i.test(bucket.description || "") && clock !== "sliding"
+        : (/fully refresh|refresh in/i.test(bucket.description || "") && clock !== "sliding") || exactZeroAnchored
           ? "auto_reset" as const
           : "unknown" as const;
       const prior = input.priors.find((item) => item.key === `${poolId}:${key}` || item.key === key) || null;
@@ -325,7 +432,9 @@ export async function sendAntigravity(request: SendRequest, agy: string, signal?
   if (isShuttingDown() || signal?.aborted) return { outcome: "not_sent", sessionId: null, detail: "退出中，未启动发送", started: false };
   const help = await runCommand({ command: agy, args: ["--help"], timeoutMs: 10_000, signal });
   if (isShuttingDown() || signal?.aborted) return { outcome: "not_sent", sessionId: null, detail: "退出中，未启动发送", started: false };
-  const isolation = assessAgyIsolation(commandText(help));
+  // 发送前总是重新核对插件、MCP 和钩子，不复用读取时的缓存
+  const isolation = await resolveAgyIsolation(agy, commandText(help), { fresh: true, signal });
+  if (isShuttingDown() || signal?.aborted) return { outcome: "not_sent", sessionId: null, detail: "退出中，未启动发送", started: false };
   if (!isolation.ok) {
     return { outcome: "not_sent", sessionId: null, detail: isolation.reason, started: false };
   }
@@ -377,7 +486,7 @@ async function readAntigravityViaCli(options: {
       return { provider: "antigravity", category: "protocol", message: "agy /usage 没有返回可解析额度", retryAfterMs: 30_000 };
     }
     const cli = options.agy && !options.usageText ? await readAgyIdentity(options.agy, options.signal) : { email: "", credits: null as number | null, error: "" };
-    const isolation = assessAgyIsolation(helpText);
+    const isolation = options.helpText != null ? assessAgyIsolation(helpText) : await resolveAgyIsolation(options.agy, helpText, { fresh: false, signal: options.signal });
     const pools = mapGroups({
       email: cli.email || "cli-unverified",
       groups,

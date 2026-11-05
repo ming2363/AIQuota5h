@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SAMPLE_MIN_MS, decide } from "./decision.js";
-import { VERIFY_STALL_MS, blocksActivation, confirmsTask, laterPeriodProven, windowDurationMs } from "./verify.js";
+import { PERIOD_PRECISION_MS, VERIFY_STALL_MS, blocksActivation, confirmsTask, laterPeriodProven, windowDurationMs } from "./verify.js";
 import type { Store, TaskRow } from "./store.js";
 import { redactText } from "./redact.js";
 import { GRACE_MS, providerRefreshMs, SHORT_PROMPT, type PoolFact, type ProviderId, type ProviderReadError, type ProviderSnapshot, type SendResult, type WindowFact } from "./types.js";
@@ -127,15 +127,26 @@ export class Engine {
       this.deps.store.savePool(enriched, snapshot.rawSummary);
       this.verifyPool(enriched);
       const blocker = decision.action === "send" ? this.blockingTask(enriched, now) : null;
+      // 决策为发送但本轮不能派发的原因；为 null 表示可以派发
+      const held = decision.action !== "send" || blocker
+        ? null
+        : this.stopped ? "后台正在停止"
+          : this.deps.store.paused() ? "已暂停"
+            : !this.deps.store.activating(pool.provider, pool.poolId) ? "未开启到期自动激活"
+              // 与 sendOnce 的前置检查保持一致：池子带有拦截原因时不会发出请求
+              : enriched.blockReason && enriched.blockReason !== "idle_due" ? enriched.blockReason
+                : snapshot.appCliConsistent !== true ? "应用与命令行账号未确认一致"
+                  : null;
       const message = blocker
         ? `${pool.poolId} 未领取：任务 ${blocker.id} 仍为 ${blocker.status}，已持续 ${Math.round((now - (blocker.claimed_at || blocker.updated_at)) / 60_000)} 分钟，未发送`
-        : `${pool.poolId} ${decision.action === "send" ? "decide" : decision.action}:${decision.reason}`;
+        : `${pool.poolId} ${decision.action === "send" ? "decide" : decision.action}:${decision.reason}${held ? `，未发送：${held}` : ""}`;
       this.deps.store.addEvent("info", message, snapshot.provider, now);
       this.deps.log("info", message, snapshot.provider);
       const key = poolKey(enriched);
       if (decision.action === "wait" && decision.dueAt) this.dueSuppressed.set(key, decision.dueAt);
-      else if (decision.action !== "send" || blocker) this.dueSuppressed.set(key, now + 60_000);
-      if (decision.action === "send" && !blocker && !this.stopped && !this.deps.store.paused() && this.deps.store.activating(pool.provider, pool.poolId) && snapshot.appCliConsistent === true) {
+      // 不能派发的“发送”决策同样按常规间隔复查，避免到期后每隔十几秒反复读取
+      else if (decision.action !== "send" || blocker || held) this.dueSuppressed.set(key, now + 60_000);
+      if (decision.action === "send" && !blocker && !held) {
         void this.dispatch(enriched, decision.windowKeys);
       }
     }
@@ -153,14 +164,19 @@ export class Engine {
           return { ...window, oldEndedAt: prior.old_ended_at, evidence: [...window.evidence, "preserved_period_boundary"] };
         }
       }
-      if (!prior || window.state === "active" || window.oldEndedAt != null) return window;
-      if (window.state !== "idle") return window;
-      const boundary = prior.preserved_boundary
-        ?? (prior.state === "active" && prior.reset_at != null && prior.reset_at <= now ? prior.reset_at : null);
+      if (window.state !== "idle" || window.oldEndedAt != null) return window;
+      const boundary = prior
+        ? prior.preserved_boundary
+          ?? (prior.state === "active" && prior.reset_at != null && prior.reset_at <= now ? prior.reset_at : null)
+        : null;
       if (boundary != null && boundary <= now) {
         return { ...window, oldEndedAt: boundary, evidence: [...window.evidence, "preserved_old_boundary"] };
       }
-      return window;
+      // 服务端已证明窗口未开始计时（idle），但查不到旧窗口的结束时间：
+      // 旧窗口最晚在本次观察时就已结束，记下首次观察时间作为保守边界。
+      // 本轮仍按边界未知拦截；下一轮起按“边界 + 宽限期”正常激活，避免永远卡在 old_boundary_unknown。
+      if (window.preservedBoundary != null) return window;
+      return { ...window, preservedBoundary: now, evidence: [...window.evidence, "first_seen_unstarted_as_boundary"] };
     });
     return { ...pool, windows };
   }
@@ -500,6 +516,15 @@ export class Engine {
         this.deps.store.updateTasks([task.id], { status: "confirmed", window_result: "active", detail: `目标窗口在发送后启动，sent=${task.claimed_at ?? task.updated_at}，started=${startedAt}，reset=${window.resetAt}` }, now);
         continue;
       }
+      if (alreadyRunningOnSchedule(task, window, now)) {
+        this.deps.store.updateTasks([task.id], {
+          status: "skipped",
+          error_category: "not_needed",
+          window_result: "active",
+          detail: "该窗口按固定日程重置，发送前已在计时，本次请求不影响它；不重发。",
+        }, now);
+        continue;
+      }
       if (laterPeriodProven(task, window, now)) {
         this.deps.store.updateTasks([task.id], {
           status: "skipped",
@@ -586,3 +611,15 @@ export function emptyWork(dir: string): void {
 }
 
 export { SHORT_PROMPT };
+
+/**
+ * 固定日程窗口在任务认定的旧边界之前就已开始计时：说明任务是按“未开始”误判发出的，请求既不能也不需要启动它。
+ * 正常的到期接续任务，其周期起点就是任务记录的旧边界，不满足此条件，保留原有防重发保护。
+ */
+function alreadyRunningOnSchedule(task: TaskRow, window: WindowFact, now: number): boolean {
+  if (window.key !== task.window_key) return false;
+  if (window.activationMode !== "auto_reset" || window.state !== "active" || window.resetAt == null || window.resetAt <= now) return false;
+  const startedAt = window.resetAt - windowDurationMs(window.key);
+  const sentAt = task.claimed_at ?? task.updated_at;
+  return startedAt < sentAt && startedAt + PERIOD_PRECISION_MS < task.old_ended_at;
+}
