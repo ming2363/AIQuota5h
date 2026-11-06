@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SAMPLE_MIN_MS, decide } from "./decision.js";
-import { PERIOD_PRECISION_MS, VERIFY_STALL_MS, blocksActivation, confirmsTask, laterPeriodProven, windowDurationMs } from "./verify.js";
+import { CONFIRM_SLACK_MS, PERIOD_PRECISION_MS, VERIFY_STALL_MS, blocksActivation, confirmsTask, laterPeriodProven, windowDurationMs } from "./verify.js";
 import type { Store, TaskRow } from "./store.js";
 import { redactText } from "./redact.js";
 import { GRACE_MS, providerRefreshMs, SHORT_PROMPT, type PoolFact, type ProviderId, type ProviderReadError, type ProviderSnapshot, type SendResult, type WindowFact } from "./types.js";
@@ -162,6 +162,17 @@ export class Engine {
         }
         if (prior.window_id === window.windowId && prior.old_ended_at != null) {
           return { ...window, oldEndedAt: prior.old_ended_at, evidence: [...window.evidence, "preserved_period_boundary"] };
+        }
+      }
+      if (window.state === "idle" && window.oldEndedAt != null) {
+        // 旧边界上的请求已按时长收尾，而服务端仍报同一个旧边界：那次请求可能启动的窗口最晚在
+        // “发送时刻 + 窗口时长 + 确认余量”结束，以此作为新边界，避免新周期沿用旧任务而被去重
+        const elapsed = this.deps.store.elapsedTask(pool.provider, pool.accountId, pool.poolId, window.key, window.oldEndedAt);
+        if (elapsed?.claimed_at != null) {
+          const boundary = elapsed.claimed_at + windowDurationMs(window.key) + CONFIRM_SLACK_MS;
+          if (boundary <= now) {
+            return { ...window, oldEndedAt: boundary, windowId: `${window.key}:ended:${boundary}`, evidence: [...window.evidence, "elapsed_request_window_boundary"] };
+          }
         }
       }
       if (window.state !== "idle" || window.oldEndedAt != null) return window;
@@ -537,6 +548,17 @@ export class Engine {
         continue;
       }
       const age = now - (task.claimed_at || task.updated_at);
+      // 发送时刻 + 窗口时长 + 确认余量之后，这次请求可能启动的窗口必然已经结束：
+      // 旧任务收尾，新周期按正常流程激活。否则请求太小、用量显示 0% 而无法确认时，防重发保护会永远不释放。
+      if (["verifying", "unknown_result", "stalled"].includes(task.status) && task.claimed_at != null && age >= windowDurationMs(task.window_key) + CONFIRM_SLACK_MS) {
+        this.deps.store.updateTasks([task.id], {
+          status: "skipped",
+          error_category: "period_elapsed",
+          window_result: "unconfirmed",
+          detail: "这次请求可能启动的窗口已确定结束，旧任务收尾，不重发；新周期按正常流程激活。",
+        }, now);
+        continue;
+      }
       if (task.status !== "stalled" && age >= VERIFY_STALL_MS) {
         const accepted = task.message_result === "accepted";
         this.deps.store.updateTasks([task.id], {

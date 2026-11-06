@@ -287,3 +287,54 @@ test("正常到期接续任务：周期起点等于任务旧边界时不按“�
   assert.notEqual(row?.error_category, "not_needed");
   ctx.store.close();
 });
+
+test("已接受但无法确认的任务：超过窗口时长加确认余量后收尾，下一周期可以激活", async () => {
+  const ctx = setup();
+  const sentAt = 10_000_000_000;
+  const oldEnd = sentAt - 70_000;
+  ctx.setNow(sentAt);
+  const first = snapshot([idleWindow(oldEnd)], sentAt);
+  const [task] = ctx.store.claim(first.pools[0], first.pools[0].windows, sentAt);
+  ctx.store.updateTasks([task.id], { status: "stalled", message_result: "accepted" }, sentAt + 31 * 60_000);
+  // 窗口结束后服务端仍只给出旧边界（请求启动的那个窗口从未被证明），历史上会永远阻塞
+  const stillBlocked = snapshot([idleWindow(oldEnd)], sentAt + 60 * 60_000);
+  ctx.setNow(sentAt + 60 * 60_000);
+  ctx.setSnapshot(stillBlocked);
+  ctx.engine.observe(stillBlocked);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(ctx.sends.length, 0, "窗口时长内保留防重发保护");
+  const later = sentAt + 5 * 60 * 60_000 + 31 * 60_000;
+  ctx.setNow(later);
+  const next = snapshot([idleWindow(oldEnd)], later);
+  ctx.setSnapshot(next);
+  ctx.engine.observe(next);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const row = ctx.store.recentTasks().find((item) => item.id === task.id);
+  assert.equal(row?.error_category, "period_elapsed");
+  assert.equal(ctx.sends.length, 0, "收尾当轮仍沿用旧边界，被去重，不会重发");
+  // 下一轮：以“发送时刻 + 窗口时长 + 确认余量”为新边界，进入新周期激活
+  ctx.setNow(later + 60_000);
+  const after = snapshot([idleWindow(oldEnd)], later + 60_000);
+  ctx.setSnapshot(after);
+  ctx.engine.observe(after);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(ctx.sends.length, 1, "旧任务收尾后进入新周期激活");
+  ctx.store.close();
+});
+
+test("已确认的旧任务不会被按时长改写", async () => {
+  const ctx = setup();
+  const sentAt = 10_000_000_000;
+  ctx.setNow(sentAt);
+  const first = snapshot([idleWindow(sentAt - 70_000)], sentAt);
+  const [task] = ctx.store.claim(first.pools[0], first.pools[0].windows, sentAt);
+  ctx.store.updateTasks([task.id], { status: "confirmed", message_result: "accepted", window_result: "active" }, sentAt);
+  const later = sentAt + 6 * 60 * 60_000;
+  ctx.setNow(later);
+  const snap = snapshot([idleWindow(sentAt - 70_000)], later);
+  ctx.setSnapshot(snap);
+  ctx.engine.observe(snap);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(ctx.store.recentTasks().find((item) => item.id === task.id)?.status, "confirmed");
+  ctx.store.close();
+});

@@ -451,6 +451,13 @@ export class Store {
     return this.db.prepare(`SELECT * FROM tasks WHERE status IN (${marks}) ORDER BY id`).all(...statuses) as unknown as TaskRow[];
   }
 
+  /** 同一旧边界上因“请求可能启动的窗口已结束”而收尾的任务（服务端边界未更新时用于推算新边界）。 */
+  elapsedTask(provider: string, accountId: string, poolId: string, windowKey: string, oldEndedAt: number): TaskRow | null {
+    return (this.db.prepare(
+      "SELECT * FROM tasks WHERE provider = ? AND account_id = ? AND pool_id = ? AND window_key = ? AND error_category = 'period_elapsed' AND claimed_at IS NOT NULL AND ABS(old_ended_at - ?) <= 5000 ORDER BY id DESC LIMIT 1",
+    ).get(provider, accountId, poolId, windowKey, oldEndedAt) as TaskRow | undefined) ?? null;
+  }
+
   activationTasks(): TaskRow[] {
     return this.db.prepare("SELECT * FROM tasks WHERE status IN ('in_flight','verifying','unknown_result','stalled') OR error_category = 'period_unconfirmed' ORDER BY id").all() as unknown as TaskRow[];
   }
