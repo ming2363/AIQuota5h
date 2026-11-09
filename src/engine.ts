@@ -181,7 +181,8 @@ export class Engine {
           ?? (prior.state === "active" && prior.reset_at != null && prior.reset_at <= now ? prior.reset_at : null)
         : null;
       if (boundary != null && boundary <= now) {
-        return { ...window, oldEndedAt: boundary, evidence: [...window.evidence, "preserved_old_boundary"] };
+        // 窗口编号必须随边界更新：沿用 `5h:unbounded` 会让每个新周期都撞上第一次激活的任务而被去重，永远发不出去
+        return { ...window, oldEndedAt: boundary, windowId: `${window.key}:ended:${boundary}`, evidence: [...window.evidence, "preserved_old_boundary"] };
       }
       // 服务端已证明窗口未开始计时（idle），但查不到旧窗口的结束时间：
       // 旧窗口最晚在本次观察时就已结束，记下首次观察时间作为保守边界。
@@ -208,7 +209,13 @@ export class Engine {
     }
     const targets = pool.windows.filter((window) => keys.includes(window.key));
     const claimed = this.deps.store.claim(pool, targets, this.deps.now());
-    if (claimed.length === 0) return;
+    if (claimed.length === 0) {
+      // 不再静默放弃：领取失败时写明，避免“一直显示该激活却没有任何任务”无从排查
+      const message = `${pool.poolId} 未能领取激活任务（${targets.map((window) => window.windowId).join("、")} 已有任务或仍受防重发保护），未发送`;
+      this.deps.store.addEvent("warn", message, pool.provider);
+      this.deps.log("warn", message, pool.provider);
+      return;
+    }
     const ids = claimed.map((row) => row.id);
     if (this.haltUnsent(ids)) return;
     const generation = this.deps.store.poolGeneration(pool.provider, pool.accountId, pool.poolId);

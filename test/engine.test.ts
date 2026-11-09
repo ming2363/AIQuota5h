@@ -338,3 +338,41 @@ test("已确认的旧任务不会被按时长改写", async () => {
   assert.equal(ctx.store.recentTasks().find((item) => item.id === task.id)?.status, "confirmed");
   ctx.store.close();
 });
+
+test("连续两个未开始计时的周期都能激活：窗口编号随边界更新，不被第一次的任务去重", async () => {
+  const ctx = setup();
+  const unstarted = (): WindowFact => ({
+    key: "5h",
+    kind: "session",
+    activationMode: "usage_started",
+    state: "idle",
+    oldEndedAt: null,
+    resetAt: null,
+    allowance: "allowed",
+    sharesRequest: true,
+    evidence: ["clock=sliding", "sliding_reset_matches_unstarted_window", "old_boundary_not_on_server"],
+    windowId: "5h:unbounded",
+  });
+  const active = (resetAt: number): WindowFact => ({ ...unstarted(), state: "active", resetAt, evidence: ["usage_recorded_and_anchored_reset"], windowId: `5h:${resetAt}` });
+  const step = async (at: number, windows: WindowFact[]) => {
+    ctx.setNow(at);
+    const snap = snapshot(windows, at);
+    ctx.setSnapshot(snap);
+    ctx.engine.observe(snap);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  };
+  const t0 = 10_000_000_000;
+  await step(t0, [unstarted()]);
+  await step(t0 + 66_000, [unstarted()]);
+  assert.equal(ctx.sends.length, 1, "第一个周期激活");
+  // 第一个周期启动、5 小时后结束，再次进入未开始状态
+  const reset = t0 + 70_000 + 5 * 60 * 60_000;
+  await step(t0 + 120_000, [active(reset)]);
+  const t1 = reset + 60_000;
+  await step(t1, [unstarted()]);
+  await step(t1 + 66_000, [unstarted()]);
+  assert.equal(ctx.sends.length, 2, "第二个周期也激活");
+  const ids = ctx.store.recentTasks().map((row) => row.expired_window_id);
+  assert.ok(!ids.includes("5h:unbounded"), "任务不再使用占位窗口编号");
+  ctx.store.close();
+});
