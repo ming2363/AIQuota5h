@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem.menu = menu
         model.onUpdate = { [weak self] in
             guard let self, !self.fullyExiting, let data = model.dashboard else { return }
-            self.stateItem.title = data.running ? "后台运行中 · \(data.pools.count) 个额度池" : "后台未运行"
+            self.stateItem.title = data.running ? "后台运行中 · \(data.pools.filter { $0.monitoring }.count) 个额度池" : "后台未运行"
         }
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in

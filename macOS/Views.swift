@@ -57,14 +57,14 @@ struct DashboardView: View {
                         Label("后台已暂停自动处理", systemImage: "pause.circle.fill").foregroundStyle(.orange)
                     }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), alignment: .top)], alignment: .leading, spacing: 16) {
-                        ForEach(data.pools) { pool in PoolCard(pool: pool, model: model) }
+                        ForEach(data.pools.filter { $0.monitoring }) { pool in PoolCard(pool: pool, model: model) }
                     }
-                    ForEach(data.providers.filter { !$0.hasSnapshot }) { provider in
+                    ForEach(data.providers.filter { $0.monitoring && !$0.hasSnapshot }) { provider in
                         HStack(spacing: 12) {
                             Image(systemName: "questionmark.circle").font(.title2).foregroundStyle(.secondary)
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(provider.name).font(.headline)
-                                Text(!provider.monitoring ? "自动读取已关闭，可在设置中开启。" : provider.lastRead?.detail ?? "尚无额度数据，请检查客户端登录和后台状态。")
+                                Text(provider.lastRead?.detail ?? "尚无额度数据，请检查客户端登录和后台状态。")
                                     .font(.callout).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -235,11 +235,10 @@ struct PoolCard: View {
                 Toggle("到期自动激活", isOn: Binding(get: { pool.autoActivate }, set: { enabled in
                     model.perform(["control", "activate", pool.provider, enabled ? "on" : "off", pool.poolId])
                 })).toggleStyle(.switch).controlSize(.small)
-                    .disabled(model.busy || !pool.monitoring)
+                    .disabled(model.busy)
             } else {
                 Label("官方定时重置，无需消息激活", systemImage: "arrow.clockwise.circle").font(.caption).foregroundStyle(.secondary)
             }
-            if !pool.monitoring { Text("该渠道自动读取已关闭；以下为历史快照。自动激活同时停止。").font(.caption).foregroundStyle(.orange) }
             if let read = pool.lastRead, read.status != "ok" && read.status != "running" {
                 VStack(alignment: .leading, spacing: 5) {
                     Label(read.status == "rate_limited" ? "官方接口暂时限流，以下为上次成功读取的额度" : "最近读取失败：\(read.detail)", systemImage: "exclamationmark.circle")
