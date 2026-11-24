@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { printStatus } from "../src/cli.js";
+import { dashboard } from "../src/dashboard.js";
 import { Engine } from "../src/engine.js";
 import { sendCodex } from "../src/providers/codex.js";
 import { Store } from "../src/store.js";
@@ -362,4 +363,89 @@ test("状态检查全部待核验任务，不遗漏最近十条之外的旧任�
     console.log = originalLog;
     ctx.cleanup();
   }
+});
+
+test("同池 weekly 已 active 但留有 stalled 记录时，不阻断同池 5h 自动激活与看板提示", async () => {
+  const clock = { now: Date.now() - 2 * 60 * 60_000 };
+  const sentAt = clock.now;
+  const ctx = open(clock, "unknown");
+  const originalLog = console.log;
+  const output: string[] = [];
+  try {
+    const weeklyBoundary = clock.now - 180_000;
+    const weeklyIdle: WindowFact = {
+      key: "weekly",
+      kind: "weekly",
+      activationMode: "usage_started",
+      state: "idle",
+      oldEndedAt: weeklyBoundary,
+      resetAt: null,
+      allowance: "allowed",
+      sharesRequest: true,
+      evidence: ["server_past_boundary"],
+      windowId: `weekly:ended:${weeklyBoundary}`,
+    };
+    const fiveHourBoundary = clock.now + 30 * 60_000;
+    const active5h: WindowFact = {
+      key: "5h",
+      kind: "session",
+      activationMode: "usage_started",
+      state: "active",
+      oldEndedAt: null,
+      resetAt: fiveHourBoundary,
+      allowance: "allowed",
+      sharesRequest: true,
+      evidence: ["usage_active"],
+      windowId: `5h:${fiveHourBoundary}`,
+    };
+    ctx.engine.observe(snap([active5h, weeklyIdle], clock.now));
+    await ctx.engine.drain();
+    assert.equal(ctx.sends(), 1);
+
+    // 超过 VERIFY_STALL_MS 后 weekly 已进入 stalled，如果 weekly 仍 idle，则同池仍受阻塞
+    clock.now += VERIFY_STALL_MS + 60_000;
+    ctx.engine.observe(snap([idle(fiveHourBoundary), weeklyIdle], clock.now));
+    await ctx.engine.drain();
+    assert.equal(ctx.sends(), 1, "weekly 仍未启动时不允许重复唤醒");
+
+    // 一旦 weekly 已是 active（新周期已在运行，但因启动时间落在 CONFIRM_SLACK_MS 内故 task 仍为 stalled），
+    // 5h 到期必须正常激活且面板不误报阻塞
+    const activeWeekly: WindowFact = {
+      ...weeklyIdle,
+      state: "active",
+      oldEndedAt: null,
+      resetAt: sentAt + 7 * 24 * 60 * 60_000,
+    };
+    const next5hEnd = clock.now + 60_000;
+    const idleNotYetDue = snap([{ ...active5h, state: "active", resetAt: next5hEnd }, activeWeekly], clock.now);
+    ctx.engine.observe(idleNotYetDue);
+    assert.equal(ctx.store.activationTasks().some((t) => t.window_key === "weekly" && t.status === "stalled"), true);
+    const board = dashboard(ctx.store, true, clock.now);
+    assert.deepEqual(board.pools[0]?.guards, []);
+    console.log = (line) => { output.push(String(line)); };
+    printStatus(ctx.store, ["进程: 运行中"]);
+    console.log = originalLog;
+    assert.doesNotMatch(output.join("\n"), /防重发保护（历史请求待核验/);
+
+    // 5h 满 65s 到期后应能通过 shouldProbeDue 探测，并正常领取并发送
+    clock.now = next5hEnd + 70_000;
+    assert.equal(ctx.engine.shouldProbeDue(clock.now), true);
+    ctx.engine.observe(snap([idle(next5hEnd), activeWeekly], clock.now));
+    await ctx.engine.drain();
+    assert.equal(ctx.sends(), 2);
+  } finally {
+    console.log = originalLog;
+    ctx.cleanup();
+  }
+});
+
+test("laterPeriodProven 也对已证明开启新周期的 auto_reset 活跃窗口生效", () => {
+  const sentAt = 1_700_000_000_000;
+  const week = 7 * 24 * 60 * 60_000;
+  const newStart = sentAt + CONFIRM_SLACK_MS + 10_000;
+  assert.equal(laterPeriodProven(
+    { window_key: "weekly", old_ended_at: sentAt - 120_000, claimed_at: sentAt, updated_at: sentAt },
+    { key: "weekly", state: "active", activationMode: "auto_reset", resetAt: newStart + week, oldEndedAt: null },
+    newStart + 60_000,
+  ), true);
 });

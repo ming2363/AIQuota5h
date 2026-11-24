@@ -74,3 +74,67 @@ test("CLI 取整百分比的 100% 不能证明零用量", () => {
   assert.notEqual(weekly.state, "idle");
   assert.notEqual(weekly.activationMode, "auto_reset", "取整的 100% 不能证明固定日程");
 });
+
+test("Antigravity 各额度池历史边界不跨池串用", () => {
+  const claude5hEnd = OLD_END + 20_000;
+  const facts = mapGroups({
+    email: "a@example.com",
+    groups: [
+      {
+        displayName: "Claude and GPT models",
+        buckets: [
+          { bucketId: "claude-gpt-5h", window: "5h", remainingFraction: 1, resetTime: new Date(NOW + 5 * 60 * 60_000).toISOString() },
+          { bucketId: "claude-gpt-weekly", window: "weekly", remainingFraction: 1, resetTime: new Date(OLD_END + WEEK).toISOString() },
+        ],
+      },
+      {
+        displayName: "Gemini",
+        buckets: [
+          { bucketId: "gemini-5h", window: "5h", remainingFraction: 1, resetTime: new Date(NOW + 5 * 60 * 60_000).toISOString() },
+          { bucketId: "gemini-weekly", window: "weekly", remainingFraction: 1, resetTime: new Date(NOW + WEEK).toISOString() },
+        ],
+      },
+    ],
+    secondGroups: [
+      {
+        displayName: "Claude and GPT models",
+        buckets: [
+          { bucketId: "claude-gpt-5h", window: "5h", remainingFraction: 1, resetTime: new Date(NOW + 8_000 + 5 * 60 * 60_000).toISOString() },
+          { bucketId: "claude-gpt-weekly", window: "weekly", remainingFraction: 1, resetTime: new Date(OLD_END + WEEK).toISOString() },
+        ],
+      },
+      {
+        displayName: "Gemini",
+        buckets: [
+          { bucketId: "gemini-5h", window: "5h", remainingFraction: 1, resetTime: new Date(NOW + 8_000 + 5 * 60 * 60_000).toISOString() },
+          { bucketId: "gemini-weekly", window: "weekly", remainingFraction: 1, resetTime: new Date(NOW + 8_000 + WEEK).toISOString() },
+        ],
+      },
+    ],
+    now: NOW,
+    priors: [
+      { key: "5h", poolId: "claude-gpt", windowId: "5h:unbounded", resetAt: null, preservedBoundary: claude5hEnd, state: "idle", observedAt: NOW - 60_000 },
+      { key: "weekly", poolId: "claude-gpt", windowId: "weekly:x", preservedBoundary: null, observedAt: OLD_END - 60_000, state: "active", resetAt: OLD_END },
+    ],
+    credits: 0,
+    consistent: true,
+    isolation: { ok: true, reason: "" },
+  });
+  const claude = facts.find((poolItem) => poolItem.poolId === "claude-gpt")!;
+  const gemini = facts.find((poolItem) => poolItem.poolId === "gemini")!;
+  assert.equal(claude.windows.find((w) => w.key === "5h")?.oldEndedAt, claude5hEnd);
+  assert.equal(gemini.windows.find((w) => w.key === "5h")?.oldEndedAt, null, "gemini 不能借用 claude-gpt 的 5h 历史边界");
+  assert.equal(gemini.windows.find((w) => w.key === "weekly")?.activationMode, "usage_started", "gemini weekly 不能借用 claude-gpt weekly 的固定日程 prior");
+});
+
+test("Antigravity 固定日程 weekly 不设 sharesRequest，到期切换不误触发 auto_reset_due", () => {
+  const facts = pool({ remainingFraction: 1, resetAt: OLD_END + WEEK }, { state: "active", resetAt: OLD_END });
+  const weekly = facts.windows.find((item) => item.key === "weekly")!;
+  assert.equal(weekly.activationMode, "auto_reset");
+  assert.equal(weekly.sharesRequest, false);
+  // 若 5h 也已 active，固定日程 weekly 的 prior 到期切换不能因为 sharesRequest=true 而误发请求
+  const active5h = { ...facts.windows.find((item) => item.key === "5h")!, state: "active" as const, oldEndedAt: null, resetAt: NOW + 4 * 60 * 60_000 };
+  const decision = decide({ ...facts, windows: [active5h, weekly] }, NOW);
+  assert.equal(decision.action, "skip");
+  assert.equal(decision.reason, "no_idle_activation_target");
+});

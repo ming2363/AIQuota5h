@@ -318,7 +318,11 @@ export function mapGroups(input: {
         : (/fully refresh|refresh in/i.test(bucket.description || "") && clock !== "sliding") || exactZeroAnchored
           ? "auto_reset" as const
           : "unknown" as const;
-      const prior = input.priors.find((item) => item.key === `${poolId}:${key}` || item.key === key) || null;
+      const prior = input.priors.find((item) =>
+        (item.key === `${poolId}:${key}` || item.key === key)
+        && (!item.poolId || item.poolId === poolId)
+        && (!item.accountId || item.accountId === input.email)
+      ) || null;
       const classified = classifyWindow({
         key,
         kind: key,
@@ -329,7 +333,7 @@ export function mapGroups(input: {
         usageText: bucket.description || "",
         clock,
         activationHint: hint,
-        sharesRequest: true,
+        sharesRequest: hint !== "auto_reset",
       }, prior ? { ...prior, key } : null, input.now);
       return { ...toFact(classified), remainingFraction: typeof bucket.remainingFraction === "number" && Number.isFinite(bucket.remainingFraction) && bucket.remainingFraction >= 0 && bucket.remainingFraction <= 1 ? bucket.remainingFraction : null };
     });

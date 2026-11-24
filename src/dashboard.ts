@@ -1,6 +1,6 @@
 import { maskEmail, maskId, redactText } from "./redact.js";
 import type { Store, TaskRow } from "./store.js";
-import { blocksActivation } from "./verify.js";
+import { activatableWindowKeys, blocksTarget } from "./verify.js";
 import { providerRefreshMs, type WindowFact } from "./types.js";
 
 export const PROVIDER_NAMES: Record<string, string> = {
@@ -21,13 +21,16 @@ export function dashboard(store: Store, running: boolean, now = Date.now()) {
     return !account || account === row.account_id;
   }).map((row) => {
     const related = windows.filter((item) => item.provider === row.provider && item.account_id === row.account_id && item.pool_id === row.pool_id);
+    const targetKeys = activatableWindowKeys(related.map((item) => ({
+      key: item.window_key, state: item.state, resetAt: item.reset_at, oldEndedAt: item.old_ended_at,
+    })), now);
     const guards = outstanding.filter((task) => {
       if (task.provider !== row.provider || task.account_id !== row.account_id || task.pool_id !== row.pool_id) return false;
       const window = related.find((item) => item.window_key === task.window_key);
-      return blocksActivation(task, window ? {
+      return blocksTarget(task, window ? {
         key: window.window_key, state: window.state as WindowFact["state"], activationMode: window.activation_mode as WindowFact["activationMode"],
         oldEndedAt: window.old_ended_at, resetAt: window.reset_at,
-      } : undefined, now);
+      } : undefined, targetKeys, now);
     });
     const label = String(row.account_label || row.account_id);
     return {

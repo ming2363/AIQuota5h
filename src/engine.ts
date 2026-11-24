@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SAMPLE_MIN_MS, decide } from "./decision.js";
-import { CONFIRM_SLACK_MS, PERIOD_PRECISION_MS, VERIFY_STALL_MS, blocksActivation, confirmsTask, laterPeriodProven, windowDurationMs } from "./verify.js";
+import { CONFIRM_SLACK_MS, PERIOD_PRECISION_MS, VERIFY_STALL_MS, blocksTarget, confirmsTask, laterPeriodProven, windowDurationMs } from "./verify.js";
 import type { Store, TaskRow } from "./store.js";
 import { redactText } from "./redact.js";
 import { GRACE_MS, providerRefreshMs, SHORT_PROMPT, type PoolFact, type ProviderId, type ProviderReadError, type ProviderSnapshot, type SendResult, type WindowFact } from "./types.js";
@@ -80,10 +80,10 @@ export class Engine {
       if (tasks.some((task) => {
         if (task.provider !== window.provider || task.account_id !== window.account_id || task.pool_id !== window.pool_id) return false;
         const observed = windows.find((item) => item.provider === task.provider && item.account_id === task.account_id && item.pool_id === task.pool_id && item.window_key === task.window_key);
-        return blocksActivation(task, observed ? {
+        return blocksTarget(task, observed ? {
           key: observed.window_key, state: observed.state as WindowFact["state"], activationMode: observed.activation_mode as WindowFact["activationMode"],
           oldEndedAt: observed.old_ended_at, resetAt: observed.reset_at,
-        } : undefined, now);
+        } : undefined, [window.window_key], now);
       })) return false;
       return now >= this.retryAt(window.provider as ProviderId);
     });
@@ -126,7 +126,7 @@ export class Engine {
       enriched.blockReason = enriched.blockReason || (decision.action === "block" ? decision.reason : undefined);
       this.deps.store.savePool(enriched, snapshot.rawSummary);
       this.verifyPool(enriched);
-      const blocker = decision.action === "send" ? this.blockingTask(enriched, now) : null;
+      const blocker = decision.action === "send" ? this.blockingTask(enriched, now, decision.windowKeys) : null;
       // 决策为发送但本轮不能派发的原因；为 null 表示可以派发
       const held = decision.action !== "send" || blocker
         ? null
@@ -512,12 +512,12 @@ export class Engine {
     return job;
   }
 
-  private blockingTask(pool: PoolFact, now: number): TaskRow | null {
+  private blockingTask(pool: PoolFact, now: number, targetKeys: string[] = pool.windows.map((window) => window.key)): TaskRow | null {
     const rows = this.deps.store.activationTasks()
       .filter((row) => row.provider === pool.provider && row.account_id === pool.accountId && row.pool_id === pool.poolId);
     for (const row of rows) {
       const window = pool.windows.find((item) => item.key === row.window_key);
-      if (blocksActivation(row, window, now)) return row;
+      if (blocksTarget(row, window, targetKeys, now)) return row;
     }
     return null;
   }

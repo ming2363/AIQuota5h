@@ -14,7 +14,7 @@ import { readGrokIdentity, sendGrok } from "./providers/grok.js";
 import { maskEmail, maskId, redactText } from "./redact.js";
 import { Store } from "./store.js";
 import { GRACE_MS, type PoolFact, type SendResult, type WindowFact } from "./types.js";
-import { blocksActivation } from "./verify.js";
+import { activatableWindowKeys, blocksTarget } from "./verify.js";
 import { dashboard, readHistory, taskHistory } from "./dashboard.js";
 import { requestRefresh, updateControl } from "./controls.js";
 import { controlService } from "./service.js";
@@ -196,11 +196,15 @@ export function printStatus(store: Store, header: string[]): void {
   const blocking = store.activationTasks().filter((task) => {
     const currentAccount = store.getMeta(`account:${task.provider}`);
     if (currentAccount && currentAccount !== task.account_id) return false;
-    const window = windows.find((item) => item.provider === task.provider && item.account_id === task.account_id && item.pool_id === task.pool_id && item.window_key === task.window_key);
-    return blocksActivation(task, window ? {
+    const poolWindows = windows.filter((item) => item.provider === task.provider && item.account_id === task.account_id && item.pool_id === task.pool_id);
+    const targetKeys = activatableWindowKeys(poolWindows.map((item) => ({
+      key: item.window_key, state: item.state, resetAt: item.reset_at, oldEndedAt: item.old_ended_at,
+    })), now);
+    const window = poolWindows.find((item) => item.window_key === task.window_key);
+    return blocksTarget(task, window ? {
       key: window.window_key, state: window.state as WindowFact["state"], activationMode: window.activation_mode as WindowFact["activationMode"],
       oldEndedAt: window.old_ended_at, resetAt: window.reset_at,
-    } : undefined, now);
+    } : undefined, targetKeys, now);
   });
   const body = [header[0].includes("进程") ? `${header[0]}（只表示进程，不表示已自动激活）` : header[0], `暂停: ${store.paused() ? "是（跨重启有效）" : "否"}`];
   const auth = ["codex", "claude", "antigravity", "grok"].map((provider) => `${provider}=${store.getMeta(`auth:${provider}`) || "-"}`);

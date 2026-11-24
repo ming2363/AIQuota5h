@@ -24,7 +24,7 @@ export function laterPeriodProven(
 ): boolean {
   const sentAt = task.claimed_at ?? null;
   if (sentAt == null || window.key !== task.window_key) return false;
-  if (window.activationMode === "usage_started" && window.state === "active" && window.resetAt != null && window.resetAt > now) {
+  if ((window.activationMode === "usage_started" || window.activationMode === "auto_reset") && window.state === "active" && window.resetAt != null && window.resetAt > now) {
     const startedAt = window.resetAt - windowDurationMs(window.key);
     return startedAt <= now && startedAt > sentAt + CONFIRM_SLACK_MS;
   }
@@ -35,11 +35,37 @@ export function laterPeriodProven(
   return periodStart + PERIOD_PRECISION_MS >= sentAt;
 }
 
+export function isActiveWindow(window: ActivationWindow | undefined, now: number): boolean {
+  return Boolean(window && window.state === "active" && window.resetAt != null && window.resetAt > now);
+}
+
 /** 历史未确认任务仍保留去重保护，只有窗口证据证明已进入后续周期才放行。 */
 export function blocksActivation(task: ActivationTask, window: ActivationWindow | undefined, now: number): boolean {
   if (task.status === "in_flight") return true;
   if (!["verifying", "unknown_result", "stalled"].includes(task.status) && task.error_category !== "period_unconfirmed") return false;
   return !window || !laterPeriodProven(task, window, now);
+}
+
+/** 按目标窗口判断是否拦截：某窗口自身已处于活跃运行期时，其未收尾历史任务不阻断同池其他窗口的激活。 */
+export function blocksTarget(
+  task: ActivationTask,
+  taskWindow: ActivationWindow | undefined,
+  targetKeys: string[],
+  now: number,
+): boolean {
+  if (task.status === "in_flight") return true;
+  if (!blocksActivation(task, taskWindow, now)) return false;
+  if (!targetKeys.includes(task.window_key) && isActiveWindow(taskWindow, now)) return false;
+  return true;
+}
+
+export function activatableWindowKeys(
+  windows: Array<{ key: string; state: string; resetAt: number | null; oldEndedAt: number | null }>,
+  now: number,
+): string[] {
+  return windows
+    .filter((window) => window.state !== "active" || window.resetAt == null || window.resetAt <= now || window.oldEndedAt != null)
+    .map((window) => window.key);
 }
 
 export function confirmsTask(
