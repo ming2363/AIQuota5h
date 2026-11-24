@@ -1,6 +1,6 @@
 {
   "name": "aiquota5h",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "description": "macOS AI 订阅额度窗口到期自动激活工具，让下一轮计时不必等用户开工",
   "main": "index.js",
   "directories": {
@@ -23,7 +23,9 @@
     "typescript": "^5.9.3"
   },
   "private": true,
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "bin": {
     "aiquota5h": "./dist/src/index.js"
   }
