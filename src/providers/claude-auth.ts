@@ -69,7 +69,13 @@ export async function loadClaudeOAuth(dir: string, signal?: AbortSignal, fetcher
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ grant_type: "refresh_token", refresh_token: oauth.refreshToken, client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e", scope: oauth.scopes?.join(" ") }),
     });
-    if (!response.ok) throw new ProviderHttpError(`Claude 订阅续期失败 HTTP ${response.status}${response.status === 401 || response.status === 403 ? "，请重新运行 aiquota5h claude-login" : "，稍后自动重试"}`, response.status, retryAfterMs(response.headers));
+    if (!response.ok) {
+      // 刷新令牌被吊销（如换账号、在别处登出）时官方返回 400 invalid_grant，重试不会恢复，只能重新登录
+      let code = "";
+      if (response.status === 400) { try { code = String((await response.json() as Record<string, unknown>).error ?? ""); } catch { /* 响应体不是 JSON */ } }
+      const relogin = response.status === 401 || response.status === 403 || code === "invalid_grant";
+      throw new ProviderHttpError(`Claude 订阅续期失败 HTTP ${response.status}${relogin ? "，登录已失效，请重新运行 aiquota5h claude-login" : "，稍后自动重试"}`, relogin ? 401 : response.status, retryAfterMs(response.headers));
+    }
     const data = await response.json() as Record<string, unknown>;
     if (typeof data.access_token !== "string" || !data.access_token || typeof data.expires_in !== "number" || !Number.isFinite(data.expires_in) || data.expires_in <= 0) {
       throw new Error("Claude 订阅续期响应无效，未覆盖原登录态");

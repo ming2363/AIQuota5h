@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { GRACE_MS, type PoolFact, type ProviderId, type TaskStatus, type WindowFact } from "./types.js";
-import { blocksActivation } from "./verify.js";
+import { blocksTarget } from "./verify.js";
 
 export interface TaskRow {
   id: number;
@@ -356,6 +356,9 @@ export class Store {
     this.db.prepare(
       "UPDATE tasks SET status = 'skipped', error_category = 'account_changed', detail = '账号已切换，旧任务失效', updated_at = ? WHERE provider = ? AND account_id = ? AND status IN ('pending','in_flight','verifying','blocked','unknown_result','stalled')",
     ).run(at, provider, previousAccountId);
+    // 旧账号的快照和窗口不会再更新，留着会让看板一直显示过期的旧账号额度
+    this.db.prepare("DELETE FROM windows WHERE provider = ? AND account_id = ?").run(provider, previousAccountId);
+    this.db.prepare("DELETE FROM pool_snapshots WHERE provider = ? AND account_id = ?").run(provider, previousAccountId);
   }
 
   claim(pool: PoolFact, windows: WindowFact[], now: number): TaskRow[] {
@@ -365,7 +368,8 @@ export class Store {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const outstanding = this.activationTasks().filter((row) => row.provider === pool.provider && row.account_id === pool.accountId && row.pool_id === pool.poolId);
-      if (outstanding.some((row) => blocksActivation(row, pool.windows.find((window) => window.key === row.window_key), now))) {
+      const targetKeys = idle.map((window) => window.key);
+      if (outstanding.some((row) => blocksTarget(row, pool.windows.find((window) => window.key === row.window_key), targetKeys, now))) {
         this.db.exec("COMMIT");
         return [];
       }

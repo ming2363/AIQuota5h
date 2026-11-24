@@ -10,6 +10,7 @@ import { Store } from "../src/store.js";
 import { GRACE_MS, type SendRequest } from "../src/types.js";
 import { buildClaudeArgs, mapClaudeUsage, readClaude, sendClaude } from "../src/providers/claude.js";
 import { claudeEnvironment, loadClaudeOAuth, saveClaudeOAuth } from "../src/providers/claude-auth.js";
+import { ProviderHttpError } from "../src/providers/http.js";
 
 const NOW = Date.now();
 const PROFILE = { account: { uuid: "official-account", email: "test@example.com" }, organization: { organization_type: "claude_pro", has_extra_usage_enabled: false } };
@@ -117,6 +118,10 @@ test("到期凭证单次续期并原子保存旋转令牌，失败不覆盖原�
   saveClaudeOAuth(dir, { ...a, expiresAt: Date.now() - 1 });
   const previous = fs.readFileSync(file, "utf8");
   await assert.rejects(loadClaudeOAuth(dir, undefined, (async () => new Response("", { status: 401 })) as typeof fetch), /续期失败/);
+  assert.equal(fs.readFileSync(file, "utf8"), previous);
+  const revoked = (async () => new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 })) as typeof fetch;
+  await assert.rejects(loadClaudeOAuth(dir, undefined, revoked), (error: unknown) => error instanceof ProviderHttpError && error.status === 401 && /重新运行 aiquota5h claude-login/.test(error.message));
+  await assert.rejects(loadClaudeOAuth(dir, undefined, (async () => new Response("bad", { status: 400 })) as typeof fetch), /稍后自动重试/);
   assert.equal(fs.readFileSync(file, "utf8"), previous);
 });
 

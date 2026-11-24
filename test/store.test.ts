@@ -87,11 +87,14 @@ test("换账号使旧任务失效，令牌刷新不改变账号标识", () => {
   const file = tempDb();
   const store = new Store(file);
   const fact = pool();
+  store.savePool(fact, "raw");
   store.claim(fact, fact.windows, 5_000);
   store.invalidateAccount("codex", "acct-1", 7_000);
   const tasks = store.recentTasks();
   assert.equal(tasks[0]?.status, "skipped");
   assert.equal(tasks[0]?.error_category, "account_changed");
+  assert.equal(store.snapshots().length, 0);
+  assert.equal(store.allWindows().length, 0);
   store.close();
 });
 
